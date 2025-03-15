@@ -1,0 +1,61 @@
+# app/models.py
+import datetime
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Boolean, Enum
+from sqlalchemy.orm import relationship, declarative_base
+import enum
+from sqlalchemy.dialects.postgresql import ENUM
+import pytz
+
+Base = declarative_base()
+
+# Get PST timezone
+pst = pytz.timezone('America/Los_Angeles')
+
+def get_pst_time():
+    # Convert to PST and remove timezone info before storing
+    return datetime.datetime.now(pst).replace(tzinfo=None)
+
+class EmailType(str, enum.Enum):
+    MAIN = "MAIN"
+    FOLLOW_UP = "FOLLOW_UP"
+
+class EmailStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    SENT = "SENT"
+    FAILED = "FAILED"
+    
+class Recruiter(Base):
+    __tablename__ = 'recruiters'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(255), nullable=False)
+    email = Column(String(255), unique=True, nullable=False)
+    company = Column(String(255), nullable=False)
+    created_at = Column(DateTime, default=get_pst_time)
+
+    emails = relationship("Email", back_populates="recruiter")
+
+class Email(Base):
+    __tablename__ = 'emails'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    recruiter_id = Column(Integer, ForeignKey('recruiters.id'), nullable=False)
+    email_type = Column(ENUM('MAIN', 'FOLLOW_UP', name='emailtype', create_type=False), nullable=False)
+    subject = Column(String(255), nullable=False)
+    status = Column(ENUM('PENDING', 'SENT', 'FAILED', name='emailstatus', create_type=False), nullable=False)
+    tracking_id = Column(String(255), unique=True)
+    created_at = Column(DateTime, default=get_pst_time)
+    is_opened = Column(Boolean, default=False)
+
+    # Add these relationship definitions back
+    recruiter = relationship("Recruiter", back_populates="emails")
+    tracking_events = relationship("EmailTracking", back_populates="email")
+
+
+class EmailTracking(Base):
+    __tablename__ = 'email_tracking'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    email_id = Column(Integer, ForeignKey('emails.id'), nullable=False)
+    opened_at = Column(DateTime, default=get_pst_time)
+    user_agent = Column(String(512))
+    ip_address = Column(String(45))
+
+    email = relationship("Email", back_populates="tracking_events")

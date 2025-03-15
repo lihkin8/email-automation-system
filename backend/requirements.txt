@@ -1,0 +1,28 @@
+# Web Framework
+fastapi
+uvicorn[standard]
+
+# Database
+sqlalchemy
+alembic
+
+# Google API
+google-auth
+google-auth-oauthlib
+google-api-python-client
+
+# Templates
+jinja2
+
+# Environment
+python-dotenv
+
+# Settings Management
+pydantic
+pydantic-settings
+
+# Async Support
+greenlet
+asyncpg
+
+pytz
