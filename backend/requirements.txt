@@ -26,3 +26,6 @@ greenlet
 asyncpg
 
 pytz
+
+# Cloud Storage
+boto3
