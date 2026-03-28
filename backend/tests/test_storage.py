@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 
 def test_settings_has_r2_fields():
-    """Settings loads R2 config from environment variables."""
+    """The Settings class can be instantiated with R2 config from environment variables."""
     env = {
         "NEON_DB_URL": "postgresql://test",
         "GMAIL_CREDENTIALS_PATH": "/tmp/creds.json",
