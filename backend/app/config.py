@@ -6,6 +6,10 @@ class Settings(BaseSettings):
     gmail_credentials_path: str
     tracking_pixel_base_url: str
     base_url: str
+    r2_account_id: str
+    r2_access_key_id: str
+    r2_secret_access_key: str
+    r2_bucket_name: str
 
     class Config:
         env_file = ".env"
