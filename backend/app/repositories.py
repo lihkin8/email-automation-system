@@ -9,9 +9,17 @@ class RecruiterRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_by_email(self, email: str) -> Optional[Recruiter]:
-        result = await self.session.execute(select(Recruiter).where(Recruiter.email == email))
+    async def get_by_email(self, email: str, user_id: int) -> Optional[Recruiter]:
+        result = await self.session.execute(
+            select(Recruiter).where(Recruiter.email == email, Recruiter.user_id == user_id)
+        )
         return result.scalars().first()
+
+    async def get_all(self, user_id: int) -> List[Recruiter]:
+        result = await self.session.execute(
+            select(Recruiter).where(Recruiter.user_id == user_id).order_by(Recruiter.created_at.desc())
+        )
+        return result.scalars().all()
 
     async def add(self, recruiter: Recruiter) -> Recruiter:
         self.session.add(recruiter)
@@ -38,17 +46,18 @@ class EmailRepository:
             return email_obj
         return None
 
-    async def get_unopened_emails(self, cutoff_date: datetime.datetime) -> List[Email]:
+    async def get_unopened_emails(self, cutoff_date: datetime.datetime, user_id: int) -> List[Email]:
         result = await self.session.execute(
             select(Email)
             .join(Email.recruiter)
             .where(
+                Email.user_id == user_id,
                 Email.is_opened == False,
                 Email.status == EmailStatus.SENT,
                 Email.created_at < cutoff_date,
                 ~Email.recruiter_id.in_(
                     select(Email.recruiter_id)
-                    .where(Email.email_type == EmailType.FOLLOW_UP)
+                    .where(Email.email_type == EmailType.FOLLOW_UP, Email.user_id == user_id)
                 )
             )
         )
@@ -63,10 +72,10 @@ class EmailRepository:
             return email_obj
         return None
 
-    async def get_by_recruiter(self, recruiter_id: int) -> List[Email]:
+    async def get_by_recruiter(self, recruiter_id: int, user_id: int) -> List[Email]:
         result = await self.session.execute(
             select(Email)
-            .where(Email.recruiter_id == recruiter_id)
+            .where(Email.recruiter_id == recruiter_id, Email.user_id == user_id)
             .order_by(Email.created_at.desc())
         )
         return result.scalars().all()
@@ -81,10 +90,10 @@ class EmailTrackingRepository:
         await self.session.refresh(tracking)
         return tracking
 
-    async def get_tracking_events(self, email_id: int) -> List[EmailTracking]:
+    async def get_tracking_events(self, email_id: int, user_id: int) -> List[EmailTracking]:
         result = await self.session.execute(
             select(EmailTracking)
-            .where(EmailTracking.email_id == email_id)
+            .where(EmailTracking.email_id == email_id, EmailTracking.user_id == user_id)
             .order_by(EmailTracking.opened_at.desc())
         )
         return result.scalars().all()
