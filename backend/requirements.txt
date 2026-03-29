@@ -29,3 +29,7 @@ pytz
 
 # Cloud Storage
 boto3
+
+# Testing
+httpx
+pytest-asyncio
