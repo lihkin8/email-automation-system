@@ -11,6 +11,7 @@ def test_imports():
         import jinja2
         import dotenv
         import pydantic
+        import boto3
         
         print("✅ All packages imported successfully!")
         
