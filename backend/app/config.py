@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     r2_bucket_name: str
     google_client_id: str
     google_client_secret: str
+    jwt_secret: str
+    fernet_key: str
 
     class Config:
         env_file = ".env"

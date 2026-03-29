@@ -3,7 +3,7 @@ from typing import Optional, List
 import datetime
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models import Recruiter, Email, EmailTracking, EmailStatus, EmailType
+from app.models import Recruiter, Email, EmailTracking, EmailStatus, EmailType, User
 
 class RecruiterRepository:
     def __init__(self, session: AsyncSession):
@@ -88,3 +88,46 @@ class EmailTrackingRepository:
             .order_by(EmailTracking.opened_at.desc())
         )
         return result.scalars().all()
+
+
+class UserRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get_by_google_id(self, google_id: str) -> Optional[User]:
+        """Fetch a user by their Google OAuth subject ID."""
+        result = await self.session.execute(
+            select(User).where(User.google_id == google_id)
+        )
+        return result.scalars().first()
+
+    async def get_by_email(self, email: str) -> Optional[User]:
+        """Fetch a user by email address."""
+        result = await self.session.execute(
+            select(User).where(User.email == email)
+        )
+        return result.scalars().first()
+
+    async def upsert(self, google_id: str, email: str, name: str,
+                     avatar_url: Optional[str],
+                     encrypted_refresh_token: Optional[str]) -> User:
+        """Insert or update a user record after OAuth callback."""
+        user = await self.get_by_google_id(google_id)
+        if user is None:
+            user = User(
+                google_id=google_id,
+                email=email,
+                name=name,
+                avatar_url=avatar_url,
+                gmail_refresh_token=encrypted_refresh_token,
+            )
+            self.session.add(user)
+        else:
+            user.email = email
+            user.name = name
+            user.avatar_url = avatar_url
+            if encrypted_refresh_token is not None:
+                user.gmail_refresh_token = encrypted_refresh_token
+        await self.session.commit()
+        await self.session.refresh(user)
+        return user
