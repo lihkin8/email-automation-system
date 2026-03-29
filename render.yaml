@@ -2,6 +2,7 @@ services:
   - type: web
     name: email-automation-backend
     runtime: python
+    pythonVersion: "3.11"
     region: oregon
     rootDir: backend
     buildCommand: pip install -r requirements.txt
