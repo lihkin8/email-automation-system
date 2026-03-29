@@ -94,6 +94,13 @@ class UserRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    async def get_by_id(self, user_id: int) -> Optional[User]:
+        """Fetch a user by their integer primary key."""
+        result = await self.session.execute(
+            select(User).where(User.id == user_id)
+        )
+        return result.scalars().first()
+
     async def get_by_google_id(self, google_id: str) -> Optional[User]:
         """Fetch a user by their Google OAuth subject ID."""
         result = await self.session.execute(

@@ -36,3 +36,6 @@ pytest-asyncio
 
 # Auth & Encryption
 cryptography
+authlib
+python-jose[cryptography]
+itsdangerous
