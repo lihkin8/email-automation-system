@@ -8,6 +8,19 @@ import pytz
 
 Base = declarative_base()
 
+
+class User(Base):
+    __tablename__ = 'users'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    google_id = Column(String(255), unique=True, nullable=False)
+    email = Column(String(255), unique=True, nullable=False)
+    name = Column(String(255), nullable=False)
+    avatar_url = Column(String(512))
+    gmail_refresh_token = Column(Text)  # Fernet-encrypted at rest
+    resume_url = Column(String(512))
+    follow_up_days = Column(Integer, default=3)
+    created_at = Column(DateTime, default=get_pst_time)
+
 # Get PST timezone
 pst = pytz.timezone('America/Los_Angeles')
 

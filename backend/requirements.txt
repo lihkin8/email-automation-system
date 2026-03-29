@@ -33,3 +33,6 @@ boto3
 # Testing
 httpx
 pytest-asyncio
+
+# Auth & Encryption
+cryptography
