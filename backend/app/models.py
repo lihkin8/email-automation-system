@@ -8,6 +8,13 @@ import pytz
 
 Base = declarative_base()
 
+# Get PST timezone
+pst = pytz.timezone('America/Los_Angeles')
+
+def get_pst_time():
+    # Convert to PST and remove timezone info before storing
+    return datetime.datetime.now(pst).replace(tzinfo=None)
+
 
 class User(Base):
     __tablename__ = 'users'
@@ -20,13 +27,6 @@ class User(Base):
     resume_url = Column(String(512))
     follow_up_days = Column(Integer, default=3)
     created_at = Column(DateTime, default=get_pst_time)
-
-# Get PST timezone
-pst = pytz.timezone('America/Los_Angeles')
-
-def get_pst_time():
-    # Convert to PST and remove timezone info before storing
-    return datetime.datetime.now(pst).replace(tzinfo=None)
 
 class EmailType(str, enum.Enum):
     MAIN = "MAIN"
