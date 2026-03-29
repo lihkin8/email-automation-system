@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     r2_access_key_id: str
     r2_secret_access_key: str
     r2_bucket_name: str
+    google_client_id: str
+    google_client_secret: str
 
     class Config:
         env_file = ".env"
