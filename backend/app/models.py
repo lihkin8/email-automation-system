@@ -1,6 +1,6 @@
 # app/models.py
 import datetime
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Boolean, Enum
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Boolean, Enum, UniqueConstraint
 from sqlalchemy.orm import relationship, declarative_base
 import enum
 from sqlalchemy.dialects.postgresql import ENUM
@@ -40,16 +40,22 @@ class EmailStatus(str, enum.Enum):
 class Recruiter(Base):
     __tablename__ = 'recruiters'
     id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     name = Column(String(255), nullable=False)
-    email = Column(String(255), unique=True, nullable=False)
+    email = Column(String(255), nullable=False)
     company = Column(String(255), nullable=False)
     created_at = Column(DateTime, default=get_pst_time)
 
     emails = relationship("Email", back_populates="recruiter")
 
+    __table_args__ = (
+        UniqueConstraint('email', 'user_id', name='uq_recruiters_email_user'),
+    )
+
 class Email(Base):
     __tablename__ = 'emails'
     id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     recruiter_id = Column(Integer, ForeignKey('recruiters.id'), nullable=False)
     email_type = Column(ENUM('MAIN', 'FOLLOW_UP', name='emailtype', create_type=False), nullable=False)
     subject = Column(String(255), nullable=False)
@@ -66,6 +72,7 @@ class Email(Base):
 class EmailTracking(Base):
     __tablename__ = 'email_tracking'
     id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     email_id = Column(Integer, ForeignKey('emails.id'), nullable=False)
     opened_at = Column(DateTime, default=get_pst_time)
     user_agent = Column(String(512))
