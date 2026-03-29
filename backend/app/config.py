@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     google_client_secret: str
     jwt_secret: str
     fernet_key: str
+    frontend_url: str = "http://localhost:3000"
 
     class Config:
         env_file = ".env"

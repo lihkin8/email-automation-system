@@ -33,3 +33,5 @@ services:
         sync: false
       - key: FERNET_KEY
         sync: false
+      - key: FRONTEND_URL
+        sync: false
