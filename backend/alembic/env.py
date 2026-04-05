@@ -61,9 +61,16 @@ def run_migrations_online() -> None:
 
     """
     # Alembic requires a sync driver; swap asyncpg for psycopg2 in the URL.
-    sync_url = settings.neon_db_url.replace(
-        "postgresql+asyncpg://", "postgresql+psycopg2://"
-    ).replace("postgresql://", "postgresql+psycopg2://")
+    # Also replace `ssl=require` with `sslmode=require` — psycopg2 uses the
+    # latter; asyncpg uses the former.
+    sync_url = (
+        settings.neon_db_url
+        .replace("postgresql+asyncpg://", "postgresql+psycopg2://")
+        .replace("postgresql://", "postgresql+psycopg2://")
+        .replace("ssl=require", "sslmode=require")
+        .replace("prepared_statement_cache_size=0&", "")
+        .replace("&prepared_statement_cache_size=0", "")
+    )
 
     connectable = engine_from_config(
         {"sqlalchemy.url": sync_url},

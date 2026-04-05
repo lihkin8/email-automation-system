@@ -1,6 +1,6 @@
 # app/models.py
 import datetime
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Boolean, Enum, UniqueConstraint
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Boolean, Enum
 from sqlalchemy.orm import relationship, declarative_base
 import enum
 from sqlalchemy.dialects.postgresql import ENUM
@@ -37,20 +37,29 @@ class EmailStatus(str, enum.Enum):
     SENT = "SENT"
     FAILED = "FAILED"
     
+class ContactList(Base):
+    __tablename__ = 'contact_lists'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    name = Column(String(255), nullable=False)
+    source = Column(String(50), nullable=False)  # 'TEXT_FILE' | 'APOLLO'
+    created_at = Column(DateTime, default=get_pst_time)
+
+    recruiters = relationship("Recruiter", back_populates="contact_list")
+
+
 class Recruiter(Base):
     __tablename__ = 'recruiters'
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    contact_list_id = Column(Integer, ForeignKey('contact_lists.id'), nullable=True)
     name = Column(String(255), nullable=False)
     email = Column(String(255), nullable=False)
     company = Column(String(255), nullable=False)
     created_at = Column(DateTime, default=get_pst_time)
 
+    contact_list = relationship("ContactList", back_populates="recruiters")
     emails = relationship("Email", back_populates="recruiter")
-
-    __table_args__ = (
-        UniqueConstraint('email', 'user_id', name='uq_recruiters_email_user'),
-    )
 
 class Email(Base):
     __tablename__ = 'emails'
