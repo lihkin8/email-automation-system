@@ -31,6 +31,9 @@ pytz
 # Cloud Storage
 boto3
 
+# File uploads
+python-multipart
+
 # Testing
 httpx
 pytest-asyncio
