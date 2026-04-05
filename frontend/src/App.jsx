@@ -1,27 +1,70 @@
-// src/App.jsx
+// App — KAN-22
+// Root component with React Router navigation and top-level AppShell.
 import React from "react";
-import { Routes, Route } from "react-router-dom";
-import ProtectedRoute from "./components/ProtectedRoute";
-import LoginPage from "./pages/LoginPage";
-import OnboardingPage from "./pages/OnboardingPage";
-import DashboardPage from "./pages/DashboardPage";
-import ContactsPage from "./pages/ContactsPage";
-import TemplatesPage from "./pages/TemplatesPage";
-import CampaignsPage from "./pages/CampaignsPage";
-import SettingsPage from "./pages/SettingsPage";
+import { BrowserRouter, Routes, Route, Link, useLocation } from "react-router-dom";
+import {
+  AppBar,
+  Toolbar,
+  Typography,
+  Button,
+  Box,
+  Container,
+} from "@mui/material";
+import Dashboard from "./components/Dashboard";
+import ContactImport from "./components/ContactImport";
+import TemplatesPage from "./components/TemplatesPage";
 
-function App() {
+const NAV_LINKS = [
+  { label: "Dashboard", path: "/" },
+  { label: "Contacts", path: "/contacts" },
+  { label: "Templates", path: "/templates" },
+];
+
+function NavBar() {
+  const location = useLocation();
   return (
-    <Routes>
-      <Route path="/" element={<LoginPage />} />
-      <Route path="/onboarding" element={<ProtectedRoute><OnboardingPage /></ProtectedRoute>} />
-      <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-      <Route path="/contacts" element={<ProtectedRoute><ContactsPage /></ProtectedRoute>} />
-      <Route path="/templates" element={<ProtectedRoute><TemplatesPage /></ProtectedRoute>} />
-      <Route path="/campaigns" element={<ProtectedRoute><CampaignsPage /></ProtectedRoute>} />
-      <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-    </Routes>
+    <AppBar position="static" color="default" elevation={1}>
+      <Toolbar>
+        <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 700 }}>
+          Email Automation
+        </Typography>
+        <Box sx={{ display: "flex", gap: 1 }}>
+          {NAV_LINKS.map(({ label, path }) => (
+            <Button
+              key={path}
+              component={Link}
+              to={path}
+              color={location.pathname === path ? "primary" : "inherit"}
+              variant={location.pathname === path ? "outlined" : "text"}
+            >
+              {label}
+            </Button>
+          ))}
+        </Box>
+      </Toolbar>
+    </AppBar>
   );
 }
 
-export default App;
+function AppShell() {
+  return (
+    <>
+      <NavBar />
+      <Container maxWidth="lg" sx={{ mt: 3, mb: 6 }}>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/contacts" element={<ContactImport />} />
+          <Route path="/templates" element={<TemplatesPage />} />
+        </Routes>
+      </Container>
+    </>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppShell />
+    </BrowserRouter>
+  );
+}

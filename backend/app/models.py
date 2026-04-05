@@ -3,7 +3,7 @@ import datetime
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Boolean, Enum
 from sqlalchemy.orm import relationship, declarative_base
 import enum
-from sqlalchemy.dialects.postgresql import ENUM
+from sqlalchemy.dialects.postgresql import ENUM, JSONB
 import pytz
 
 Base = declarative_base()
@@ -29,6 +29,10 @@ class User(Base):
     created_at = Column(DateTime, default=get_pst_time)
 
 class EmailType(str, enum.Enum):
+    MAIN = "MAIN"
+    FOLLOW_UP = "FOLLOW_UP"
+
+class TemplateType(str, enum.Enum):
     MAIN = "MAIN"
     FOLLOW_UP = "FOLLOW_UP"
 
@@ -76,6 +80,18 @@ class Email(Base):
     # Add these relationship definitions back
     recruiter = relationship("Recruiter", back_populates="emails")
     tracking_events = relationship("EmailTracking", back_populates="email")
+
+
+class Template(Base):
+    __tablename__ = 'templates'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    name = Column(String(255), nullable=False)
+    type = Column(ENUM('MAIN', 'FOLLOW_UP', name='templatetype', create_type=False), nullable=False)
+    subject = Column(String(255), nullable=False)
+    body_html = Column(Text, nullable=False)
+    variables = Column(JSONB, nullable=True)
+    created_at = Column(DateTime, default=get_pst_time)
 
 
 class EmailTracking(Base):

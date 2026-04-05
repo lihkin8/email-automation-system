@@ -3,7 +3,7 @@ from typing import Optional, List
 import datetime
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models import Recruiter, Email, EmailTracking, EmailStatus, EmailType, User, ContactList
+from app.models import Recruiter, Email, EmailTracking, EmailStatus, EmailType, User, ContactList, Template
 from app.importers.base import RecruiterData
 
 class RecruiterRepository:
@@ -178,3 +178,58 @@ class ContactRepository:
         self.session.add_all(recruiters)
         await self.session.commit()
         return len(recruiters)
+
+
+class TemplateRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create(
+        self, user_id: int, name: str, type: str,
+        subject: str, body_html: str, variables: dict | None
+    ) -> Template:
+        template = Template(
+            user_id=user_id,
+            name=name,
+            type=type,
+            subject=subject,
+            body_html=body_html,
+            variables=variables,
+        )
+        self.session.add(template)
+        await self.session.commit()
+        await self.session.refresh(template)
+        return template
+
+    async def get_all(self, user_id: int) -> List[Template]:
+        result = await self.session.execute(
+            select(Template)
+            .where(Template.user_id == user_id)
+            .order_by(Template.created_at.desc())
+        )
+        return result.scalars().all()
+
+    async def get_by_id(self, template_id: int, user_id: int) -> Optional[Template]:
+        result = await self.session.execute(
+            select(Template).where(Template.id == template_id, Template.user_id == user_id)
+        )
+        return result.scalars().first()
+
+    async def update(self, template_id: int, user_id: int, **fields) -> Optional[Template]:
+        template = await self.get_by_id(template_id, user_id)
+        if template is None:
+            return None
+        for key, value in fields.items():
+            if value is not None:
+                setattr(template, key, value)
+        await self.session.commit()
+        await self.session.refresh(template)
+        return template
+
+    async def delete(self, template_id: int, user_id: int) -> bool:
+        template = await self.get_by_id(template_id, user_id)
+        if template is None:
+            return False
+        await self.session.delete(template)
+        await self.session.commit()
+        return True
