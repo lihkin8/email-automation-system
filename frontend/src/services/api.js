@@ -41,3 +41,45 @@ export const fetchCompanyEmails = async (companyName) => {
   );
   return response.data;
 };
+
+// ── Contacts ─────────────────────────────────────────────────────────────────
+
+export const uploadContacts = async (file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await axios.post(`${API_BASE_URL}/contacts/upload`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+    withCredentials: true,
+  });
+  return response.data; // { contacts: [...], errors: [...] }
+};
+
+export const confirmImport = async ({ listName, source, contacts }) => {
+  const response = await axios.post(
+    `${API_BASE_URL}/contacts`,
+    { list_name: listName, source, contacts },
+    { withCredentials: true }
+  );
+  return response.data; // { contact_list_id, imported_count }
+};
+
+// ── Templates ─────────────────────────────────────────────────────────────────
+
+export const listTemplates = async () => {
+  const r = await axios.get(`${API_BASE_URL}/templates`, { withCredentials: true });
+  return r.data;
+};
+
+export const createTemplate = async (data) => {
+  const r = await axios.post(`${API_BASE_URL}/templates`, data, { withCredentials: true });
+  return r.data;
+};
+
+export const updateTemplate = async (id, data) => {
+  const r = await axios.put(`${API_BASE_URL}/templates/${id}`, data, { withCredentials: true });
+  return r.data;
+};
+
+export const deleteTemplate = async (id) => {
+  await axios.delete(`${API_BASE_URL}/templates/${id}`, { withCredentials: true });
+};
