@@ -13,6 +13,8 @@ import {
 import Dashboard from "./components/Dashboard";
 import ContactImport from "./components/ContactImport";
 import TemplatesPage from "./components/TemplatesPage";
+import LoginPage from "./components/LoginPage";
+import RequireAuth from "./components/RequireAuth";
 
 const NAV_LINKS = [
   { label: "Dashboard", path: "/" },
@@ -52,9 +54,11 @@ function AppShell() {
       <NavBar />
       <Container maxWidth="lg" sx={{ mt: 3, mb: 6 }}>
         <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/contacts" element={<ContactImport />} />
-          <Route path="/templates" element={<TemplatesPage />} />
+          <Route element={<RequireAuth />}>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/contacts" element={<ContactImport />} />
+            <Route path="/templates" element={<TemplatesPage />} />
+          </Route>
         </Routes>
       </Container>
     </>
@@ -64,7 +68,10 @@ function AppShell() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AppShell />
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/*" element={<AppShell />} />
+      </Routes>
     </BrowserRouter>
   );
 }

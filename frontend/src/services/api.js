@@ -83,3 +83,12 @@ export const updateTemplate = async (id, data) => {
 export const deleteTemplate = async (id) => {
   await axios.delete(`${API_BASE_URL}/templates/${id}`, { withCredentials: true });
 };
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+
+export const fetchMe = async () => {
+  const response = await axios.get(`${API_BASE_URL}/auth/me`, {
+    withCredentials: true,
+  });
+  return response.data;
+};
