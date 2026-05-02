@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
-from app.routers import auth, contacts, templates
+from app.routers import auth, contacts, templates, analytics
 
 app = FastAPI(title="Email Automation API")
 
@@ -22,6 +22,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(contacts.router)
 app.include_router(templates.router)
+app.include_router(analytics.router)
 
 
 @app.get("/health")
