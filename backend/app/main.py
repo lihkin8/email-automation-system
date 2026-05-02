@@ -13,7 +13,7 @@ app.add_middleware(SessionMiddleware, secret_key=settings.jwt_secret)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # tighten to Vercel URL after KAN-45
+    allow_origins=[settings.frontend_url],
     allow_methods=["*"],
     allow_headers=["*"],
     allow_credentials=True,
