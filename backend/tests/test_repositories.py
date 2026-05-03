@@ -24,6 +24,7 @@ async def test_update_settings_sets_fields():
     assert mock_user.follow_up_days == 7
     mock_session.commit.assert_awaited_once()
     mock_session.refresh.assert_awaited_once_with(mock_user)
+    assert result is mock_user
 
 
 @pytest.mark.asyncio
