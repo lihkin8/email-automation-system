@@ -1,44 +1,40 @@
 // src/services/api.js
 import axios from "axios";
 
-//const API_BASE_URL = "http://localhost:8000";
-const API_BASE_URL = process.env.REACT_APP_API_URL;
+const api = axios.create({
+  baseURL: process.env.REACT_APP_API_URL,
+  withCredentials: true,
+});
 
 export const fetchAnalytics = async (page = 1, pageSize = 20) => {
-  const response = await axios.get(`${API_BASE_URL}/analytics`, {
+  const response = await api.get("/analytics", {
     params: { page, page_size: pageSize },
   });
   return response.data;
 };
 
 export const fetchUnopenedEmails = async (days = 5) => {
-  const response = await axios.get(
-    `${API_BASE_URL}/unopened-emails?days=${days}`
-  );
+  const response = await api.get(`/unopened-emails?days=${days}`);
   return response.data;
 };
 
 export const fetchCompanyAnalytics = async () => {
-  const response = await axios.get(`${API_BASE_URL}/company-analytics`);
+  const response = await api.get("/company-analytics");
   return response.data;
 };
 
 export const fetchCompanies = async () => {
-  const response = await axios.get(`${API_BASE_URL}/companies`);
+  const response = await api.get("/companies");
   return response.data;
 };
 
 export const fetchCompanyDetails = async (companyName) => {
-  const response = await axios.get(
-    `${API_BASE_URL}/company/${encodeURIComponent(companyName)}`
-  );
+  const response = await api.get(`/company/${encodeURIComponent(companyName)}`);
   return response.data;
 };
 
 export const fetchCompanyEmails = async (companyName) => {
-  const response = await axios.get(
-    `${API_BASE_URL}/company/${encodeURIComponent(companyName)}/emails`
-  );
+  const response = await api.get(`/company/${encodeURIComponent(companyName)}/emails`);
   return response.data;
 };
 
@@ -47,48 +43,45 @@ export const fetchCompanyEmails = async (companyName) => {
 export const uploadContacts = async (file) => {
   const formData = new FormData();
   formData.append("file", file);
-  const response = await axios.post(`${API_BASE_URL}/contacts/upload`, formData, {
+  const response = await api.post("/contacts/upload", formData, {
     headers: { "Content-Type": "multipart/form-data" },
-    withCredentials: true,
   });
-  return response.data; // { contacts: [...], errors: [...] }
+  return response.data;
 };
 
 export const confirmImport = async ({ listName, source, contacts }) => {
-  const response = await axios.post(
-    `${API_BASE_URL}/contacts`,
-    { list_name: listName, source, contacts },
-    { withCredentials: true }
-  );
-  return response.data; // { contact_list_id, imported_count }
+  const response = await api.post("/contacts", {
+    list_name: listName,
+    source,
+    contacts,
+  });
+  return response.data;
 };
 
 // ── Templates ─────────────────────────────────────────────────────────────────
 
 export const listTemplates = async () => {
-  const r = await axios.get(`${API_BASE_URL}/templates`, { withCredentials: true });
+  const r = await api.get("/templates");
   return r.data;
 };
 
 export const createTemplate = async (data) => {
-  const r = await axios.post(`${API_BASE_URL}/templates`, data, { withCredentials: true });
+  const r = await api.post("/templates", data);
   return r.data;
 };
 
 export const updateTemplate = async (id, data) => {
-  const r = await axios.put(`${API_BASE_URL}/templates/${id}`, data, { withCredentials: true });
+  const r = await api.put(`/templates/${id}`, data);
   return r.data;
 };
 
 export const deleteTemplate = async (id) => {
-  await axios.delete(`${API_BASE_URL}/templates/${id}`, { withCredentials: true });
+  await api.delete(`/templates/${id}`);
 };
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 export const fetchMe = async () => {
-  const response = await axios.get(`${API_BASE_URL}/auth/me`, {
-    withCredentials: true,
-  });
+  const response = await api.get("/auth/me");
   return response.data;
 };
