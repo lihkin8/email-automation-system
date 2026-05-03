@@ -70,7 +70,7 @@ async def callback(
         value=jwt_token,
         httponly=True,
         secure=True,
-        samesite="lax",
+        samesite="none",
         max_age=7 * 24 * 3600,
     )
     return redirect
