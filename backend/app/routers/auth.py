@@ -34,7 +34,12 @@ CALLBACK_URL = f"{settings.base_url}/auth/callback"
 @router.get("/login")
 async def login(request: Request):
     """Redirect the user to Google's OAuth consent screen."""
-    return await oauth.google.authorize_redirect(request, CALLBACK_URL)
+    return await oauth.google.authorize_redirect(
+        request,
+        CALLBACK_URL,
+        access_type="offline",
+        prompt="consent",
+    )
 
 
 @router.get("/callback")
