@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 
 from app.models import User
+from app.repositories import UserRepository
 from app.services.auth_service import get_current_user, get_db
 from app.services import storage
 
@@ -55,8 +56,8 @@ async def update_settings(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
-    current_user.follow_up_days = body.follow_up_days
-    await session.commit()
+    repo = UserRepository(session)
+    await repo.update_settings(current_user.id, follow_up_days=body.follow_up_days)
     return {"follow_up_days": body.follow_up_days}
 
 
@@ -72,8 +73,8 @@ async def upload_resume(
         storage.delete_resume(current_user.resume_url)
     content = await file.read()
     key = storage.upload_resume(current_user.id, content, file.filename)
-    current_user.resume_url = key
-    await session.commit()
+    repo = UserRepository(session)
+    await repo.update_settings(current_user.id, resume_url=key)
     return {"resume_url": storage.get_presigned_url(key)}
 
 
@@ -85,5 +86,5 @@ async def delete_resume(
     if not current_user.resume_url:
         raise HTTPException(status_code=404, detail="No resume on file")
     storage.delete_resume(current_user.resume_url)
-    current_user.resume_url = None
-    await session.commit()
+    repo = UserRepository(session)
+    await repo.update_settings(current_user.id, resume_url=None)
