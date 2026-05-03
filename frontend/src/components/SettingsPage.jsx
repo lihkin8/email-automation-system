@@ -22,11 +22,13 @@ import {
 export default function SettingsPage() {
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
   const [followUpDays, setFollowUpDays] = useState(3);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
+  const resumeInputId = React.useId();
 
   useEffect(() => {
     fetchSettings()
@@ -34,6 +36,7 @@ export default function SettingsPage() {
         setSettings(data);
         setFollowUpDays(data.follow_up_days);
       })
+      .catch(() => setFetchError("Failed to load settings. Please refresh."))
       .finally(() => setLoading(false));
   }, []);
 
@@ -41,6 +44,10 @@ export default function SettingsPage() {
     setSnackbar({ open: true, message, severity });
 
   const handleSavePreferences = async () => {
+    if (followUpDays < 1 || followUpDays > 30) {
+      showSnackbar("Follow-up days must be between 1 and 30", "error");
+      return;
+    }
     setSaving(true);
     try {
       await updateSettings({ follow_up_days: followUpDays });
@@ -85,6 +92,14 @@ export default function SettingsPage() {
       <Box sx={{ display: "flex", justifyContent: "center", mt: 8 }}>
         <CircularProgress />
       </Box>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <Alert severity="error" sx={{ mt: 4 }}>
+        {fetchError}
+      </Alert>
     );
   }
 
@@ -171,13 +186,13 @@ export default function SettingsPage() {
           ) : (
             <Box>
               <input
-                id="resume-upload"
+                id={resumeInputId}
                 type="file"
                 accept=".pdf,.doc,.docx"
                 style={{ display: "none" }}
                 onChange={handleUploadResume}
               />
-              <label htmlFor="resume-upload">
+              <label htmlFor={resumeInputId}>
                 <Button variant="outlined" component="span" disabled={uploading}>
                   {uploading ? "Uploading…" : "Upload Resume"}
                 </Button>
