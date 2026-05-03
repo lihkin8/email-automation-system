@@ -1,6 +1,12 @@
 # tests/test_storage.py
 import os
 from unittest.mock import patch, MagicMock
+from app.services.storage import upload_resume, delete_resume, get_presigned_url
+
+
+def _make_client():
+    """Return a mock boto3 S3 client."""
+    return MagicMock()
 
 
 def test_settings_has_r2_fields():
@@ -51,11 +57,10 @@ def test_r2_client_is_configured():
 
 
 def test_upload_resume_calls_put_object():
-    mock_client = MagicMock()
+    mock_client = _make_client()
     with patch("app.services.storage.r2_client", mock_client), \
          patch("app.services.storage.settings") as mock_settings:
         mock_settings.r2_bucket_name = "test-bucket"
-        from app.services.storage import upload_resume
         key = upload_resume(42, b"pdf bytes", "cv.pdf")
 
     assert key == "resumes/42/cv.pdf"
@@ -65,25 +70,24 @@ def test_upload_resume_calls_put_object():
 
 
 def test_delete_resume_calls_delete_object():
-    mock_client = MagicMock()
+    mock_client = _make_client()
     with patch("app.services.storage.r2_client", mock_client), \
          patch("app.services.storage.settings") as mock_settings:
         mock_settings.r2_bucket_name = "test-bucket"
-        from app.services.storage import delete_resume
-        delete_resume("resumes/42/cv.pdf")
+        result = delete_resume("resumes/42/cv.pdf")
 
+    assert result is None
     mock_client.delete_object.assert_called_once_with(
         Bucket="test-bucket", Key="resumes/42/cv.pdf"
     )
 
 
 def test_get_presigned_url_calls_generate_presigned_url():
-    mock_client = MagicMock()
+    mock_client = _make_client()
     mock_client.generate_presigned_url.return_value = "https://r2.example.com/presigned"
     with patch("app.services.storage.r2_client", mock_client), \
          patch("app.services.storage.settings") as mock_settings:
         mock_settings.r2_bucket_name = "test-bucket"
-        from app.services.storage import get_presigned_url
         url = get_presigned_url("resumes/42/cv.pdf")
 
     assert url == "https://r2.example.com/presigned"
@@ -91,4 +95,18 @@ def test_get_presigned_url_calls_generate_presigned_url():
         "get_object",
         Params={"Bucket": "test-bucket", "Key": "resumes/42/cv.pdf"},
         ExpiresIn=3600,
+    )
+
+
+def test_get_presigned_url_respects_custom_expires_in():
+    mock_client = _make_client()
+    mock_client.generate_presigned_url.return_value = "https://r2.example.com/presigned"
+    with patch("app.services.storage.r2_client", mock_client), \
+         patch("app.services.storage.settings") as mock_settings:
+        mock_settings.r2_bucket_name = "test-bucket"
+        get_presigned_url("resumes/42/cv.pdf", expires_in=7200)
+    mock_client.generate_presigned_url.assert_called_once_with(
+        "get_object",
+        Params={"Bucket": "test-bucket", "Key": "resumes/42/cv.pdf"},
+        ExpiresIn=7200,
     )
