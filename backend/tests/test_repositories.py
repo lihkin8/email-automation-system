@@ -1,0 +1,62 @@
+"""Tests for repository methods."""
+import pytest
+from unittest.mock import AsyncMock, MagicMock
+
+
+@pytest.mark.asyncio
+async def test_update_settings_sets_fields():
+    from app.repositories import UserRepository
+
+    mock_user = MagicMock()
+    mock_user.id = 1
+    mock_user.follow_up_days = 3
+    mock_user.resume_url = None
+
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.first.return_value = mock_user
+
+    mock_session = AsyncMock()
+    mock_session.execute.return_value = mock_result
+
+    repo = UserRepository(mock_session)
+    result = await repo.update_settings(1, follow_up_days=7)
+
+    assert mock_user.follow_up_days == 7
+    mock_session.commit.assert_awaited_once()
+    mock_session.refresh.assert_awaited_once_with(mock_user)
+
+
+@pytest.mark.asyncio
+async def test_update_settings_allows_none_values():
+    """None values must be applied (e.g., clearing resume_url)."""
+    from app.repositories import UserRepository
+
+    mock_user = MagicMock()
+    mock_user.resume_url = "resumes/1/cv.pdf"
+
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.first.return_value = mock_user
+
+    mock_session = AsyncMock()
+    mock_session.execute.return_value = mock_result
+
+    repo = UserRepository(mock_session)
+    await repo.update_settings(1, resume_url=None)
+
+    assert mock_user.resume_url is None
+
+
+@pytest.mark.asyncio
+async def test_update_settings_returns_none_for_missing_user():
+    from app.repositories import UserRepository
+
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.first.return_value = None
+
+    mock_session = AsyncMock()
+    mock_session.execute.return_value = mock_result
+
+    repo = UserRepository(mock_session)
+    result = await repo.update_settings(999, follow_up_days=5)
+
+    assert result is None

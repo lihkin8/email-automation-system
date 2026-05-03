@@ -149,6 +149,17 @@ class UserRepository:
         await self.session.refresh(user)
         return user
 
+    async def update_settings(self, user_id: int, **fields) -> Optional[User]:
+        """Partial update: apply every key/value in fields to the user row, including None."""
+        user = await self.get_by_id(user_id)
+        if user is None:
+            return None
+        for key, value in fields.items():
+            setattr(user, key, value)
+        await self.session.commit()
+        await self.session.refresh(user)
+        return user
+
 
 class ContactRepository:
     def __init__(self, session: AsyncSession):
