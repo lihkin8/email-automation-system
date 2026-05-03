@@ -115,6 +115,16 @@ def test_patch_settings_updates_follow_up_days():
     assert response.json() == {"follow_up_days": 7}
 
 
+def test_patch_settings_mutates_user_object():
+    user = _make_user()
+    app.dependency_overrides[get_current_user] = _override_auth(user)
+    app.dependency_overrides[get_db] = _override_session()
+    TestClient(app).patch("/users/settings", json={"follow_up_days": 7})
+    app.dependency_overrides.clear()
+
+    assert user.follow_up_days == 7
+
+
 def test_patch_settings_rejects_zero():
     app.dependency_overrides[get_current_user] = _override_auth()
     app.dependency_overrides[get_db] = _override_session()
