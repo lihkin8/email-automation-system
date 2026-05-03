@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from authlib.integrations.starlette_client import OAuth
+from authlib.integrations.base_client.errors import OAuthError
 
 from app.config import settings
 from app.models import User
@@ -48,7 +49,10 @@ async def callback(
     session: AsyncSession = Depends(get_db),
 ):
     """Handle Google OAuth callback: upsert user, issue JWT cookie, redirect to frontend."""
-    token = await oauth.google.authorize_access_token(request)
+    try:
+        token = await oauth.google.authorize_access_token(request)
+    except OAuthError:
+        return RedirectResponse(url=f"{settings.frontend_url}/login", status_code=302)
     userinfo = token.get("userinfo") or await oauth.google.userinfo(token=token)
 
     google_id = userinfo["sub"]
