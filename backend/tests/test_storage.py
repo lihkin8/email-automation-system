@@ -1,6 +1,6 @@
 # tests/test_storage.py
 import os
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 
 def test_settings_has_r2_fields():
@@ -48,3 +48,47 @@ def test_r2_client_is_configured():
         # boto3 S3 client stores endpoint in its meta
         endpoint = client.meta.endpoint_url
         assert endpoint == "https://abc123.r2.cloudflarestorage.com"
+
+
+def test_upload_resume_calls_put_object():
+    mock_client = MagicMock()
+    with patch("app.services.storage.r2_client", mock_client), \
+         patch("app.services.storage.settings") as mock_settings:
+        mock_settings.r2_bucket_name = "test-bucket"
+        from app.services.storage import upload_resume
+        key = upload_resume(42, b"pdf bytes", "cv.pdf")
+
+    assert key == "resumes/42/cv.pdf"
+    mock_client.put_object.assert_called_once_with(
+        Bucket="test-bucket", Key="resumes/42/cv.pdf", Body=b"pdf bytes"
+    )
+
+
+def test_delete_resume_calls_delete_object():
+    mock_client = MagicMock()
+    with patch("app.services.storage.r2_client", mock_client), \
+         patch("app.services.storage.settings") as mock_settings:
+        mock_settings.r2_bucket_name = "test-bucket"
+        from app.services.storage import delete_resume
+        delete_resume("resumes/42/cv.pdf")
+
+    mock_client.delete_object.assert_called_once_with(
+        Bucket="test-bucket", Key="resumes/42/cv.pdf"
+    )
+
+
+def test_get_presigned_url_calls_generate_presigned_url():
+    mock_client = MagicMock()
+    mock_client.generate_presigned_url.return_value = "https://r2.example.com/presigned"
+    with patch("app.services.storage.r2_client", mock_client), \
+         patch("app.services.storage.settings") as mock_settings:
+        mock_settings.r2_bucket_name = "test-bucket"
+        from app.services.storage import get_presigned_url
+        url = get_presigned_url("resumes/42/cv.pdf")
+
+    assert url == "https://r2.example.com/presigned"
+    mock_client.generate_presigned_url.assert_called_once_with(
+        "get_object",
+        Params={"Bucket": "test-bucket", "Key": "resumes/42/cv.pdf"},
+        ExpiresIn=3600,
+    )
