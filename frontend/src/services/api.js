@@ -85,3 +85,33 @@ export const fetchMe = async () => {
   const response = await api.get("/auth/me");
   return response.data;
 };
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+
+export const fetchSettings = async () => {
+  const response = await api.get("/users/settings");
+  return response.data;
+};
+
+export const updateSettings = async (data) => {
+  const response = await api.patch("/users/settings", data);
+  return response.data;
+};
+
+export const uploadResume = async (file, onProgress) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await api.post("/users/resume", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+    onUploadProgress: (e) => {
+      if (onProgress && e.total) {
+        onProgress(Math.round((e.loaded * 100) / e.total));
+      }
+    },
+  });
+  return response.data;
+};
+
+export const deleteResume = async () => {
+  await api.delete("/users/resume");
+};
