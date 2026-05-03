@@ -13,6 +13,7 @@ import {
 import Dashboard from "./components/Dashboard";
 import ContactImport from "./components/ContactImport";
 import TemplatesPage from "./components/TemplatesPage";
+import SettingsPage from "./components/SettingsPage";
 import LoginPage from "./components/LoginPage";
 import RequireAuth from "./components/RequireAuth";
 
@@ -20,6 +21,7 @@ const NAV_LINKS = [
   { label: "Dashboard", path: "/" },
   { label: "Contacts", path: "/contacts" },
   { label: "Templates", path: "/templates" },
+  { label: "Settings", path: "/settings" },
 ];
 
 function NavBar() {
@@ -58,6 +60,7 @@ function AppShell() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/contacts" element={<ContactImport />} />
             <Route path="/templates" element={<TemplatesPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
           </Route>
         </Routes>
       </Container>
