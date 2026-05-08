@@ -82,17 +82,24 @@ def test_campaign_preview_renders_template_with_first_contact():
         "app.routers.campaigns.TemplateRepository"
     ) as MockTemplateRepo, patch(
         "app.routers.campaigns.RecruiterRepository"
-    ) as MockRecruiterRepo:
+    ) as MockRecruiterRepo, patch(
+        "app.routers.campaigns.UserRepository"
+    ) as MockUserRepo:
         campaign_repo = AsyncMock()
         template_repo = AsyncMock()
         recruiter_repo = AsyncMock()
+        user_repo = AsyncMock()
         MockCampaignRepo.return_value = campaign_repo
         MockTemplateRepo.return_value = template_repo
         MockRecruiterRepo.return_value = recruiter_repo
+        MockUserRepo.return_value = user_repo
 
         campaign_repo.get_by_id.return_value = _make_campaign()
         template_repo.get_by_id.return_value = _make_template()
         recruiter_repo.get_by_contact_list.return_value = [_make_recruiter(name="Jane Smith", company="Acme")]
+        sender = MagicMock()
+        sender.name = "Nikhil"
+        user_repo.get_by_id.return_value = sender
 
         app.dependency_overrides[get_current_user_id] = _override_auth()
         app.dependency_overrides[get_session] = _override_session()

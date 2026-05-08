@@ -63,6 +63,20 @@ export const listContactLists = async () => {
   return r.data;
 };
 
+export const getContactList = async (id) => {
+  const r = await api.get(`/contacts/lists/${id}`);
+  return r.data;
+};
+
+export const updateContactList = async (id, data) => {
+  const r = await api.put(`/contacts/lists/${id}`, data);
+  return r.data;
+};
+
+export const deleteContactList = async (id) => {
+  await api.delete(`/contacts/lists/${id}`);
+};
+
 // ── Templates ─────────────────────────────────────────────────────────────────
 
 export const listTemplates = async () => {

@@ -135,6 +135,96 @@ def test_send_campaign_returns_404_when_campaign_missing():
     assert resp.status_code == 404
 
 
+def test_send_campaign_renders_template_variables_per_recipient():
+    """Each recipient must receive a body with {{first_name}} / {{company}} substituted."""
+    with patch("app.routers.campaigns.CampaignRepository") as MockCampaignRepo, patch(
+        "app.routers.campaigns.TemplateRepository"
+    ) as MockTemplateRepo, patch(
+        "app.routers.campaigns.RecruiterRepository"
+    ) as MockRecruiterRepo, patch(
+        "app.routers.campaigns.EmailRepository"
+    ) as MockEmailRepo, patch(
+        "app.routers.campaigns.UserRepository"
+    ) as MockUserRepo, patch(
+        "app.routers.campaigns.GmailService"
+    ), patch(
+        "app.routers.campaigns.decrypt_token", return_value="plaintext-refresh-token"
+    ), patch(
+        "app.routers.campaigns.CampaignSendService"
+    ) as MockSendService:
+        campaign_repo = AsyncMock()
+        template_repo = AsyncMock()
+        recruiter_repo = AsyncMock()
+        email_repo = AsyncMock()
+        user_repo = AsyncMock()
+
+        MockCampaignRepo.return_value = campaign_repo
+        MockTemplateRepo.return_value = template_repo
+        MockRecruiterRepo.return_value = recruiter_repo
+        MockEmailRepo.return_value = email_repo
+        MockUserRepo.return_value = user_repo
+
+        jane = MagicMock()
+        jane.id = 1
+        jane.name = "Jane Doe"
+        jane.email = "jane@acme.com"
+        jane.company = "Acme"
+
+        bob = MagicMock()
+        bob.id = 2
+        bob.name = "Bob Smith"
+        bob.email = "bob@beta.com"
+        bob.company = "Beta"
+
+        campaign_repo.get_by_id.return_value = _make_campaign()
+        template_repo.get_by_id.return_value = _make_template(
+            subject="Hi {{first_name}}",
+            body_html="<p>Hello {{first_name}} at {{company}}</p>",
+        )
+        recruiter_repo.get_by_contact_list.return_value = [jane, bob]
+        email_repo.create_for_campaign.side_effect = [
+            _make_email(100, "t1"),
+            _make_email(101, "t2"),
+        ]
+
+        user = MagicMock()
+        user.name = "Nikhil"
+        user.resume_url = None
+        user.gmail_refresh_token = "encrypted-token"
+        user_repo.get_by_id.return_value = user
+
+        send_service = AsyncMock()
+        MockSendService.return_value = send_service
+        send_service.send_html_batch.return_value = MagicMock(sent=2, failed=0)
+
+        app.dependency_overrides[get_current_user_id] = _override_auth()
+        app.dependency_overrides[get_session] = _override_session()
+
+        client = TestClient(app)
+        resp = client.post("/campaigns/1/send", params={"delay_seconds": 0})
+
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 200
+    items = send_service.send_html_batch.await_args.args[0]
+    assert len(items) == 2
+
+    by_email = {to: (subj, body) for to, subj, body in items}
+    jane_subj, jane_body = by_email["jane@acme.com"]
+    assert jane_subj == "Hi Jane"
+    assert "Hello Jane at Acme" in jane_body
+    assert "{{" not in jane_body and "{{" not in jane_subj
+
+    bob_subj, bob_body = by_email["bob@beta.com"]
+    assert bob_subj == "Hi Bob"
+    assert "Hello Bob at Beta" in bob_body
+    assert "{{" not in bob_body and "{{" not in bob_subj
+
+    create_calls = email_repo.create_for_campaign.await_args_list
+    persisted_subjects = [c.kwargs["subject"] for c in create_calls]
+    assert persisted_subjects == ["Hi Jane", "Hi Bob"]
+
+
 def test_send_campaign_returns_400_when_gmail_not_connected():
     """User must connect Gmail (refresh token in DB) before campaigns can send."""
     with patch("app.routers.campaigns.CampaignRepository") as MockCampaignRepo, patch(
