@@ -1,6 +1,6 @@
 # Codebase Best-Practices Audit (Tech Debt Backlog)
 
-**Purpose**: Capture high-impact issues and low-effort improvements discovered by repo-wide review. This is intentionally actionable (files + what to change), but not a full design doc. Keep this updated as the codebase evolves.
+**Purpose**: A principal-engineer-style backlog of **highest leverage** fixes across backend + frontend. This is intentionally actionable (files + what to change), but not a full design doc. Keep it ruthlessly prioritized and tied to user-visible reliability/security.
 
 **Last updated**: 2026-05-08
 
@@ -32,30 +32,37 @@
 - **Why it matters**: Sequential IDs can be guessed; an attacker can mark emails as opened.
 - **Fix later (quick)**: Deprecate/disable compat endpoint or require a signed token. Standardize all pixels on `tracking_id` (unguessable UUID).
 
-### 4) CORS config is unsafe/incompatible with cookie auth
-- **Where**: `backend/app/main.py`
-- **Why it matters**: `allow_origins=["*"]` with `allow_credentials=True` is not valid in browsers and is unsafe for cookie-based sessions.
-- **Fix later (quick)**: Replace wildcard origins with an explicit allowlist (localhost + Vercel domains) while keeping `allow_credentials=True`.
-
-### 5) Cookie/JWT hardening gaps (claims, secret separation, CSRF posture)
+### 4) Cookie/JWT hardening gaps (logout deletion, local-dev posture, CSRF)
 - **Where**:
-  - `backend/app/routers/auth.py`
+  - `backend/app/routers/auth.py` (cookie set + logout)
   - `backend/app/services/auth_service.py`
   - `backend/app/main.py` (SessionMiddleware uses `jwt_secret`)
-- **Why it matters**: Missing standard claims/rotation; secrets are reused across concerns; cookie deletion may not match cookie attributes. Cookie auth also needs a CSRF strategy for state-changing requests.
-- **Fix later (medium)**: Separate secrets (JWT signing vs session middleware), add issuer/audience/iat, consider shorter TTL + refresh, ensure `delete_cookie()` matches flags, establish CSRF strategy.
+- **Why it matters**:
+  - `logout` deletes cookie without matching attributes (`secure`, `samesite`, `path`) → can fail to clear in browsers.
+  - `secure=True` + `samesite="none"` can complicate local dev unless you run HTTPS.
+  - Cookie-based auth needs a deliberate CSRF posture for state-changing requests.
+- **Fix later (medium)**: Separate secrets (JWT signing vs session middleware), ensure `delete_cookie()` matches flags, define CSRF strategy (double-submit or same-site + CSRF header), and document local-dev HTTPS approach.
 
-### 6) Send flow status updates are not per-email accurate
+### 5) Send flow status updates are not per-email accurate
 - **Where**:
   - `backend/app/routers/campaigns.py`
   - `backend/app/services/campaign_send_service.py`
 - **Why it matters**: Current approach can mislabel which email failed if failures are intermittent.
 - **Fix later (medium)**: Return per-item results from sender and update each `emails` row individually. Add retries/backoff and idempotency to prevent double-sends.
 
-### 7) Tracking pixel injection is fragile across email clients
-- **Where**: `backend/app/services/campaign_send_service.py` (`inject_tracking_pixel`)
+### 6) Tracking pixel injection is fragile across email clients
+- **Where**:
+  - `backend/app/services/campaign_send_service.py` (`inject_tracking_pixel`)
+  - `backend/app/services/email_service.py` (legacy HTML embeds a background-image pixel)
 - **Why it matters**: CSS background images are more likely to be stripped than `<img>` pixels.
 - **Fix later (quick)**: Inject a hidden 1×1 `<img>` pixel instead of a background-image div.
+
+### 7) Frontend XSS surface area via `dangerouslySetInnerHTML`
+- **Where**:
+  - `frontend/src/pages/CampaignsPage.jsx` (renders rendered template HTML)
+  - `frontend/src/components/GuidedTemplateBuilder.jsx` (template previews)
+- **Why it matters**: User-authored HTML templates are rendered directly; if any untrusted content can enter templates/variables, this becomes an XSS vector.
+- **Fix later (medium)**: Sanitize HTML at render time (DOMPurify) or strictly constrain template HTML to a safe subset; avoid rendering arbitrary HTML where possible.
 
 ### 8) DB indexing + timezone correctness gaps
 - **Where**:
@@ -71,14 +78,12 @@
 - **Why it matters**: Many repo methods `commit()` internally, making multi-step flows harder to reason about and leaving partial state on errors.
 - **Fix later (medium)**: Standardize to a unit-of-work style where the service/router controls commit boundaries; separate “persist intent” vs “send” vs “finalize statuses”.
 
-### 10) Frontend API integration mismatch (frontend calls endpoints backend doesn’t expose)
+### 10) Alembic migrations appear incomplete for core tables + Postgres ENUMs
 - **Where**:
-  - `frontend/src/services/api.js`
-  - `frontend/src/components/Dashboard.jsx`
-  - `frontend/src/components/ProtectedRoute.jsx`
-  - `frontend/src/pages/LoginPage.jsx`
-- **Why it matters**: Frontend references `/analytics`, `/companies`, `/company-analytics` etc., while backend currently exposes `/auth`, `/contacts`, `/templates`, `/campaigns`, `/track`. Also base URL env vars + `withCredentials` usage are inconsistent.
-- **Fix later (quick→medium)**: Align on a single base URL env var and ensure `withCredentials: true` for cookie auth. Either implement missing backend endpoints or refactor frontend to use existing endpoints.
+  - `backend/alembic/versions/*.py`
+  - `backend/app/models.py` (native Postgres ENUMs / create_type behaviors)
+- **Why it matters**: schema drift risk — new environments may be missing core tables (`recruiters/emails/email_tracking`) and/or ENUM types (`emailtype`, `emailstatus`) depending on how Alembic was generated/applied.
+- **Fix later (medium)**: reconcile DB vs models; add/adjust migrations so Alembic explicitly creates any missing tables + ENUM types (or refactor to SQLAlchemy `Enum(..., native_enum=False)`); then lock down migration workflow (no “autogenerate” drift).
 
 ---
 
@@ -86,7 +91,7 @@
 
 - **Tighten CORS for cookie auth**
   - **Files**: `backend/app/main.py`, `backend/app/config.py`
-  - **Change**: Replace wildcard CORS origin with explicit allowlist (local + Vercel).
+  - **Change**: remove any wildcard origin configuration for credentialed requests; keep an explicit allowlist matching frontend origins.
 
 - **Disable or gate `/track/pixel?email_id=...`**
   - **Files**: `backend/app/routers/tracking.py`
@@ -96,13 +101,29 @@
   - **Files**: `backend/app/services/campaign_send_service.py`
   - **Change**: Inject `<img src=\"...\" width=\"1\" height=\"1\" style=\"display:none\" alt=\"\" />`.
 
+- **Make logout cookie deletion reliable**
+  - **Files**: `backend/app/routers/auth.py`
+  - **Change**: `delete_cookie()` should match cookie attrs used in `set_cookie` (e.g., `path`, `samesite`, `secure`).
+
+- **Standardize resume attachment MIME type**
+  - **Files**: `backend/app/routers/campaigns.py`, `backend/app/services/email_service.py`
+  - **Change**: Determine MIME from filename (PDF/DOC/DOCX) instead of hardcoding `application/pdf`.
+
+- **Add upload size limits + basic resume content validation**
+  - **Files**: `backend/app/routers/users.py`, `backend/app/services/storage.py`
+  - **Change**: enforce max upload size, validate file signatures/content type, and avoid holding unbounded bytes in memory.
+
+- **Avoid blocking I/O in async request paths (R2 download)**
+  - **Files**: `backend/app/services/storage.py`, `backend/app/routers/campaigns.py`
+  - **Change**: Offload `boto3` download to a threadpool (or switch to an async S3 client) so large resume downloads don’t block the event loop during sends.
+
 - **Make SQLAlchemy `echo` configurable**
   - **Files**: `backend/app/database.py`
   - **Change**: Disable SQL echo by default in prod; enable only via env flag.
 
-- **Unify frontend base URL + cookie credentials behavior**
-  - **Files**: `frontend/src/services/api.js`, `frontend/src/components/ProtectedRoute.jsx`, `frontend/src/pages/LoginPage.jsx`
-  - **Change**: Single base URL env var; ensure `withCredentials: true` where required.
+- **Align frontend base URL usage**
+  - **Files**: `frontend/src/services/api.js`, `frontend/src/components/SettingsPage.jsx`, `frontend/src/pages/OnboardingPage.jsx`
+  - **Change**: Keep `REACT_APP_API_URL` as the single source of truth and ensure it’s set in all environments.
 
 ---
 
@@ -132,6 +153,14 @@
 - **Send correctness: per-email results + retries + idempotency**
   - **Files**: `backend/app/routers/campaigns.py`, `backend/app/services/campaign_send_service.py`, `backend/app/repositories.py`
   - **Change**: Update statuses per email; add backoff on transient Gmail failures; prevent duplicates on retry.
+
+- **Sanitize rendered HTML in frontend**
+  - **Files**: `frontend/src/pages/CampaignsPage.jsx`, `frontend/src/components/GuidedTemplateBuilder.jsx`
+  - **Change**: DOMPurify (or equivalent) or an explicit safe HTML subset.
+
+- **Stabilize frontend toolchain (CRA warnings)**
+  - **Files**: `frontend/package.json` / dependency graph
+  - **Change**: Add the missing Babel plugin dependency and keep browserslist DB current; plan migration off CRA.
 
 - **Centralize error handling + structured logs**
   - **Files**: `backend/app/main.py`, `backend/app/services/*`, `backend/app/routers/*`
