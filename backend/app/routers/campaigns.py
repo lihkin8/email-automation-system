@@ -13,7 +13,6 @@ import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from jinja2 import Template as JinjaTemplate
 
 from app.config import settings
 from app.database import get_session
@@ -22,6 +21,7 @@ from app.repositories import CampaignRepository, RecruiterRepository, TemplateRe
 from app.models import EmailType, EmailStatus
 from app.services.email_service import GmailService
 from app.services.campaign_send_service import CampaignSendService, inject_tracking_pixel
+from app.services.template_render import build_recruiter_context, render_template_string
 from app.services import storage
 from app.services.auth_service import decrypt_token
 
@@ -229,16 +229,19 @@ async def send_campaign(
     items: list[tuple[str, str, str]] = []
     email_ids: list[int] = []
     for r in recruiters:
+        ctx = build_recruiter_context(r, user)
+        subject_rendered = render_template_string(template.subject, ctx)
+        body_rendered = render_template_string(template.body_html, ctx)
         email_obj = await email_repo.create_for_campaign(
             user_id=user_id,
             campaign_id=campaign_id,
             recruiter_id=r.id,
-            subject=template.subject,
+            subject=subject_rendered,
             email_type=EmailType.MAIN,
         )
         pixel_url = f"{settings.base_url}/track/{user_id}/{email_obj.tracking_id}.gif"
-        body_html = inject_tracking_pixel(template.body_html, pixel_url=pixel_url)
-        items.append((r.email, template.subject, body_html))
+        body_html = inject_tracking_pixel(body_rendered, pixel_url=pixel_url)
+        items.append((r.email, subject_rendered, body_html))
         email_ids.append(email_obj.id)
 
     result = await sender.send_html_batch(items, delay_seconds=delay_seconds, attachments=attachments)
@@ -324,16 +327,19 @@ async def run_follow_ups(
         if recruiter is None:
             continue
 
+        ctx = build_recruiter_context(recruiter, user)
+        subject_rendered = render_template_string(follow_up_template.subject, ctx)
+        body_rendered = render_template_string(follow_up_template.body_html, ctx)
         follow_email = await email_repo.create_for_campaign(
             user_id=user_id,
             campaign_id=campaign_id,
             recruiter_id=main_email.recruiter_id,
-            subject=follow_up_template.subject,
+            subject=subject_rendered,
             email_type=EmailType.FOLLOW_UP,
         )
         pixel_url = f"{settings.base_url}/track/{user_id}/{follow_email.tracking_id}.gif"
-        body_html = inject_tracking_pixel(follow_up_template.body_html, pixel_url=pixel_url)
-        items.append((recruiter.email, follow_up_template.subject, body_html))
+        body_html = inject_tracking_pixel(body_rendered, pixel_url=pixel_url)
+        items.append((recruiter.email, subject_rendered, body_html))
         follow_up_email_ids.append(follow_email.id)
 
     result = await svc.send_follow_ups(items=items, delay_seconds=delay_seconds, attachments=attachments)
@@ -464,6 +470,7 @@ async def campaign_preview(
     campaign_repo = CampaignRepository(session)
     template_repo = TemplateRepository(session)
     recruiter_repo = RecruiterRepository(session)
+    user_repo = UserRepository(session)
 
     campaign = await campaign_repo.get_by_id(campaign_id, user_id)
     if campaign is None:
@@ -478,16 +485,10 @@ async def campaign_preview(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Contact list is empty")
     sample = recruiters[0]
 
-    first_name = sample.name.split(" ")[0] if sample.name else ""
-    resolved = {
-        "company": sample.company,
-        "company_name": sample.company,
-        "recruiter_name": sample.name,
-        "first_name": first_name,
-        "email": sample.email,
-    }
-    subject_rendered = JinjaTemplate(template.subject).render(**resolved)
-    body_html_rendered = JinjaTemplate(template.body_html).render(**resolved)
+    user = await user_repo.get_by_id(user_id)
+    resolved = build_recruiter_context(sample, user)
+    subject_rendered = render_template_string(template.subject, resolved)
+    body_html_rendered = render_template_string(template.body_html, resolved)
     return CampaignPreviewOut(
         campaign_id=campaign_id,
         sample_contact={"id": sample.id, "name": sample.name, "email": sample.email, "company": sample.company},

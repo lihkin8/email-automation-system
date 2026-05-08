@@ -6,7 +6,13 @@ import {
   Card,
   CardContent,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   FormControl,
+  IconButton,
   InputLabel,
   MenuItem,
   Select,
@@ -16,10 +22,13 @@ import {
   TableCell,
   TableHead,
   TableRow,
+  Tooltip,
   Typography,
 } from "@mui/material";
+import DeleteIcon from "@mui/icons-material/Delete";
 import {
   createCampaign,
+  deleteCampaign,
   getCampaignMetrics,
   getCampaignUnopened,
   getCampaignPreview,
@@ -41,6 +50,8 @@ export default function CampaignsPage() {
   const [unopened, setUnopened] = useState([]);
   const [sending, setSending] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -117,6 +128,26 @@ export default function CampaignsPage() {
       setError("Failed to send campaign");
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await deleteCampaign(deleteTarget.id);
+      const cs = await listCampaigns();
+      setCampaigns(cs);
+      if (deleteTarget.id === selectedCampaignId) {
+        setSelectedCampaignId(cs[0]?.id ?? "");
+      }
+      setDeleteTarget(null);
+    } catch {
+      setError("Failed to delete campaign");
+      setDeleteTarget(null);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -272,6 +303,23 @@ export default function CampaignsPage() {
         >
           {sending ? "Sending..." : "Send campaign"}
         </Button>
+
+        <Tooltip title="Delete campaign">
+          <span>
+            <IconButton
+              color="error"
+              disabled={!selectedCampaignId}
+              onClick={() => {
+                const c = campaigns.find((x) => x.id === selectedCampaignId);
+                if (c) setDeleteTarget(c);
+              }}
+              aria-label="delete-campaign"
+              data-testid="delete-campaign-btn"
+            >
+              <DeleteIcon />
+            </IconButton>
+          </span>
+        </Tooltip>
       </Box>
 
       {!preview ? (
@@ -391,6 +439,30 @@ export default function CampaignsPage() {
           </Card>
         </Box>
       )}
+
+      <Dialog open={Boolean(deleteTarget)} onClose={() => !deleting && setDeleteTarget(null)}>
+        <DialogTitle>Delete Campaign?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete "<strong>{deleteTarget?.name}</strong>"?
+            This will not delete the template or contact list. This cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteTarget(null)} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={handleDeleteConfirm}
+            disabled={deleting}
+            data-testid="confirm-delete-campaign-btn"
+          >
+            {deleting ? "Deleting..." : "Delete"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

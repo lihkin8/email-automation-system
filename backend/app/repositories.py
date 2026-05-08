@@ -3,7 +3,7 @@ from typing import Optional, List
 import datetime
 import uuid
 from sqlalchemy.future import select
-from sqlalchemy import func, case, exists
+from sqlalchemy import func, case, exists, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Recruiter, Email, EmailTracking, EmailStatus, EmailType, User, ContactList, Template, Campaign
 from app.importers.base import RecruiterData
@@ -352,6 +352,94 @@ class ContactRepository:
             .order_by(ContactList.created_at.desc())
         )
         return result.scalars().all()
+
+    async def get_by_id(self, list_id: int, user_id: int) -> Optional[ContactList]:
+        result = await self.session.execute(
+            select(ContactList).where(
+                ContactList.id == list_id, ContactList.user_id == user_id
+            )
+        )
+        return result.scalars().first()
+
+    async def count_campaigns_using_list(self, list_id: int, user_id: int) -> int:
+        result = await self.session.execute(
+            select(func.count())
+            .select_from(Campaign)
+            .where(Campaign.contact_list_id == list_id, Campaign.user_id == user_id)
+        )
+        return int(result.scalar() or 0)
+
+    async def update_list(
+        self,
+        list_id: int,
+        user_id: int,
+        name: str,
+        contacts: list[dict],
+    ) -> Optional[ContactList]:
+        """Rename the list and sync its recruiters in one transaction.
+
+        ``contacts`` is a list of dicts shaped like
+        ``{"id": int | None, "name": str, "email": str, "company": str}``.
+        Existing recruiters with a matching ``id`` are updated in place;
+        entries without an ``id`` are inserted; existing recruiters whose
+        ``id`` is not in the incoming set are deleted.
+        """
+        contact_list = await self.get_by_id(list_id, user_id)
+        if contact_list is None:
+            return None
+
+        contact_list.name = name
+
+        result = await self.session.execute(
+            select(Recruiter).where(
+                Recruiter.contact_list_id == list_id,
+                Recruiter.user_id == user_id,
+            )
+        )
+        existing = result.scalars().all()
+        existing_by_id = {r.id: r for r in existing}
+
+        seen_ids: set[int] = set()
+        for c in contacts:
+            cid = c.get("id")
+            if cid is not None and cid in existing_by_id:
+                r = existing_by_id[cid]
+                r.name = c["name"]
+                r.email = c["email"]
+                r.company = c["company"]
+                seen_ids.add(cid)
+            else:
+                self.session.add(
+                    Recruiter(
+                        user_id=user_id,
+                        contact_list_id=list_id,
+                        name=c["name"],
+                        email=c["email"],
+                        company=c["company"],
+                    )
+                )
+
+        for rid, r in existing_by_id.items():
+            if rid not in seen_ids:
+                await self.session.delete(r)
+
+        await self.session.commit()
+        await self.session.refresh(contact_list)
+        return contact_list
+
+    async def delete_list(self, list_id: int, user_id: int) -> bool:
+        contact_list = await self.get_by_id(list_id, user_id)
+        if contact_list is None:
+            return False
+        await self.session.execute(
+            delete(Recruiter).where(
+                Recruiter.contact_list_id == list_id,
+                Recruiter.user_id == user_id,
+            )
+        )
+        await self.session.delete(contact_list)
+        await self.session.commit()
+        return True
 
 
 class TemplateRepository:

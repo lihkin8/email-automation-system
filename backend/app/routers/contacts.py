@@ -8,14 +8,14 @@ The frontend holds parsed contacts in state between upload and confirm.
 Do NOT collapse these into a single endpoint.
 See design spec: docs/superpowers/specs/2026-04-04-kan-18-15-16-contact-import-design.md
 """
-from fastapi import APIRouter, Depends, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
 from app.dependencies import get_current_user_id
 from app.importers.text_file import TextFileImporter
-from app.repositories import ContactRepository
+from app.repositories import ContactRepository, RecruiterRepository
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
 
@@ -81,6 +81,33 @@ class ContactListOut(BaseModel):
     created_at: str | None = None
 
 
+class RecruiterDetail(BaseModel):
+    id: int
+    name: str
+    email: str
+    company: str
+
+
+class ContactListDetailOut(BaseModel):
+    id: int
+    name: str
+    source: str
+    created_at: str | None = None
+    contacts: list[RecruiterDetail]
+
+
+class RecruiterUpdate(BaseModel):
+    id: int | None = None
+    name: str
+    email: str
+    company: str
+
+
+class UpdateListRequest(BaseModel):
+    name: str
+    contacts: list[RecruiterUpdate]
+
+
 @router.post("", status_code=201, response_model=ConfirmImportResponse)
 async def confirm_import(
     body: ConfirmImportRequest,
@@ -116,3 +143,78 @@ async def list_contact_lists(
         )
         for l in lists
     ]
+
+
+@router.get("/lists/{list_id}", response_model=ContactListDetailOut)
+async def get_contact_list(
+    list_id: int,
+    user_id: int = Depends(get_current_user_id),
+    session: AsyncSession = Depends(get_session),
+):
+    repo = ContactRepository(session)
+    contact_list = await repo.get_by_id(list_id, user_id)
+    if contact_list is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact list not found")
+    recruiter_repo = RecruiterRepository(session)
+    recruiters = await recruiter_repo.get_by_contact_list(list_id, user_id)
+    return ContactListDetailOut(
+        id=contact_list.id,
+        name=contact_list.name,
+        source=contact_list.source,
+        created_at=(contact_list.created_at.isoformat() if getattr(contact_list, "created_at", None) else None),
+        contacts=[
+            RecruiterDetail(id=r.id, name=r.name, email=r.email, company=r.company)
+            for r in recruiters
+        ],
+    )
+
+
+@router.put("/lists/{list_id}", response_model=ContactListDetailOut)
+async def update_contact_list(
+    list_id: int,
+    body: UpdateListRequest,
+    user_id: int = Depends(get_current_user_id),
+    session: AsyncSession = Depends(get_session),
+):
+    repo = ContactRepository(session)
+    updated = await repo.update_list(
+        list_id,
+        user_id,
+        name=body.name,
+        contacts=[c.model_dump() for c in body.contacts],
+    )
+    if updated is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact list not found")
+    recruiter_repo = RecruiterRepository(session)
+    recruiters = await recruiter_repo.get_by_contact_list(list_id, user_id)
+    return ContactListDetailOut(
+        id=updated.id,
+        name=updated.name,
+        source=updated.source,
+        created_at=(updated.created_at.isoformat() if getattr(updated, "created_at", None) else None),
+        contacts=[
+            RecruiterDetail(id=r.id, name=r.name, email=r.email, company=r.company)
+            for r in recruiters
+        ],
+    )
+
+
+@router.delete("/lists/{list_id}", status_code=204)
+async def delete_contact_list(
+    list_id: int,
+    user_id: int = Depends(get_current_user_id),
+    session: AsyncSession = Depends(get_session),
+):
+    repo = ContactRepository(session)
+    contact_list = await repo.get_by_id(list_id, user_id)
+    if contact_list is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact list not found")
+
+    in_use = await repo.count_campaigns_using_list(list_id, user_id)
+    if in_use > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot delete: list is in use by {in_use} campaign(s). Delete or reassign them first.",
+        )
+
+    await repo.delete_list(list_id, user_id)

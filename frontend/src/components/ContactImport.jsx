@@ -1,6 +1,7 @@
 // ContactImport — KAN-17
 // Three-step flow: upload → preview → success
 import React, { useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Box,
   Button,
@@ -21,6 +22,7 @@ import UploadFileIcon from "@mui/icons-material/UploadFile";
 import { uploadContacts, confirmImport } from "../services/api";
 
 export default function ContactImport() {
+  const navigate = useNavigate();
   const [step, setStep] = useState("upload"); // 'upload' | 'preview' | 'success'
   const [contacts, setContacts] = useState([]);
   const [parseErrors, setParseErrors] = useState([]);
@@ -222,9 +224,14 @@ export default function ContactImport() {
         Successfully imported <strong>{importedCount}</strong> contacts to list "
         <strong>{listName}</strong>".
       </Alert>
-      <Button variant="contained" onClick={handleReset}>
-        Import Another List
-      </Button>
+      <Stack direction="row" spacing={2}>
+        <Button variant="contained" onClick={() => navigate("/contacts")}>
+          Back to Lists
+        </Button>
+        <Button variant="outlined" onClick={handleReset}>
+          Import Another List
+        </Button>
+      </Stack>
     </Box>
   );
 }

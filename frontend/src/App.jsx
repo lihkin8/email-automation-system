@@ -17,6 +17,7 @@ import SettingsPage from "./components/SettingsPage";
 import LoginPage from "./components/LoginPage";
 import RequireAuth from "./components/RequireAuth";
 import CampaignsPage from "./pages/CampaignsPage";
+import ContactsPage from "./pages/ContactsPage";
 import OnboardingPage from "./pages/OnboardingPage";
 
 const NAV_LINKS = [
@@ -62,7 +63,8 @@ function AppShell() {
         <Routes>
           <Route element={<RequireAuth />}>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/contacts" element={<ContactImport />} />
+            <Route path="/contacts" element={<ContactsPage />} />
+            <Route path="/contacts/import" element={<ContactImport />} />
             <Route path="/templates" element={<TemplatesPage />} />
             <Route path="/campaigns" element={<CampaignsPage />} />
             <Route path="/onboarding" element={<OnboardingPage />} />

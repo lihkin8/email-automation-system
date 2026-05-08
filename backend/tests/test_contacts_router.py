@@ -144,3 +144,199 @@ def test_list_contact_lists_returns_rows():
     data = response.json()
     assert data[0]["id"] == 7
     assert data[0]["name"] == "List A"
+
+
+# ── Detail / update / delete endpoints ────────────────────────────────────────
+
+def _make_list(id=7, name="List A", source="TEXT_FILE"):
+    cl = MagicMock()
+    cl.id = id
+    cl.name = name
+    cl.source = source
+    cl.created_at = None
+    return cl
+
+
+def _make_recruiter(id, name, email, company):
+    r = MagicMock()
+    r.id = id
+    r.name = name
+    r.email = email
+    r.company = company
+    return r
+
+
+def test_get_contact_list_returns_detail_with_recruiters():
+    with patch("app.routers.contacts.ContactRepository") as MockRepo, patch(
+        "app.routers.contacts.RecruiterRepository"
+    ) as MockRecruiterRepo:
+        contact_repo = AsyncMock()
+        recruiter_repo = AsyncMock()
+        MockRepo.return_value = contact_repo
+        MockRecruiterRepo.return_value = recruiter_repo
+
+        contact_repo.get_by_id.return_value = _make_list(id=7, name="List A")
+        recruiter_repo.get_by_contact_list.return_value = [
+            _make_recruiter(1, "Jane Smith", "jane@google.com", "Google"),
+            _make_recruiter(2, "Bob Jones", "bob@meta.com", "Meta"),
+        ]
+
+        app.dependency_overrides[get_current_user_id] = _override_auth()
+        app.dependency_overrides[get_session] = _override_session()
+
+        client = TestClient(app)
+        resp = client.get("/contacts/lists/7")
+
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] == 7
+    assert data["name"] == "List A"
+    assert len(data["contacts"]) == 2
+    assert data["contacts"][0]["name"] == "Jane Smith"
+    assert data["contacts"][1]["company"] == "Meta"
+
+
+def test_get_contact_list_returns_404_when_missing():
+    with patch("app.routers.contacts.ContactRepository") as MockRepo:
+        contact_repo = AsyncMock()
+        MockRepo.return_value = contact_repo
+        contact_repo.get_by_id.return_value = None
+
+        app.dependency_overrides[get_current_user_id] = _override_auth()
+        app.dependency_overrides[get_session] = _override_session()
+
+        client = TestClient(app)
+        resp = client.get("/contacts/lists/999")
+
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 404
+
+
+def test_update_contact_list_passes_payload_to_repo():
+    """Rename + add new + edit existing + remove existing — repo receives the full payload."""
+    with patch("app.routers.contacts.ContactRepository") as MockRepo, patch(
+        "app.routers.contacts.RecruiterRepository"
+    ) as MockRecruiterRepo:
+        contact_repo = AsyncMock()
+        recruiter_repo = AsyncMock()
+        MockRepo.return_value = contact_repo
+        MockRecruiterRepo.return_value = recruiter_repo
+
+        updated_list = _make_list(id=7, name="Renamed List")
+        contact_repo.update_list.return_value = updated_list
+        recruiter_repo.get_by_contact_list.return_value = [
+            _make_recruiter(1, "Jane Smith", "jane@google.com", "Google"),
+            _make_recruiter(99, "New Person", "new@stripe.com", "Stripe"),
+        ]
+
+        app.dependency_overrides[get_current_user_id] = _override_auth()
+        app.dependency_overrides[get_session] = _override_session()
+
+        client = TestClient(app)
+        resp = client.put(
+            "/contacts/lists/7",
+            json={
+                "name": "Renamed List",
+                "contacts": [
+                    {"id": 1, "name": "Jane Smith", "email": "jane@google.com", "company": "Google"},
+                    {"id": None, "name": "New Person", "email": "new@stripe.com", "company": "Stripe"},
+                ],
+            },
+        )
+
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["name"] == "Renamed List"
+    assert len(data["contacts"]) == 2
+
+    contact_repo.update_list.assert_awaited_once()
+    call = contact_repo.update_list.await_args
+    assert call.args[0] == 7
+    assert call.kwargs["name"] == "Renamed List"
+    payload = call.kwargs["contacts"]
+    assert payload == [
+        {"id": 1, "name": "Jane Smith", "email": "jane@google.com", "company": "Google"},
+        {"id": None, "name": "New Person", "email": "new@stripe.com", "company": "Stripe"},
+    ]
+
+
+def test_update_contact_list_returns_404_when_missing():
+    with patch("app.routers.contacts.ContactRepository") as MockRepo:
+        contact_repo = AsyncMock()
+        MockRepo.return_value = contact_repo
+        contact_repo.update_list.return_value = None
+
+        app.dependency_overrides[get_current_user_id] = _override_auth()
+        app.dependency_overrides[get_session] = _override_session()
+
+        client = TestClient(app)
+        resp = client.put(
+            "/contacts/lists/999",
+            json={"name": "x", "contacts": []},
+        )
+
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 404
+
+
+def test_delete_contact_list_succeeds_when_unused():
+    with patch("app.routers.contacts.ContactRepository") as MockRepo:
+        contact_repo = AsyncMock()
+        MockRepo.return_value = contact_repo
+        contact_repo.get_by_id.return_value = _make_list(id=7)
+        contact_repo.count_campaigns_using_list.return_value = 0
+        contact_repo.delete_list.return_value = True
+
+        app.dependency_overrides[get_current_user_id] = _override_auth()
+        app.dependency_overrides[get_session] = _override_session()
+
+        client = TestClient(app)
+        resp = client.delete("/contacts/lists/7")
+
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 204
+    contact_repo.delete_list.assert_awaited_once_with(7, 1)
+
+
+def test_delete_contact_list_returns_400_when_used_by_campaign():
+    with patch("app.routers.contacts.ContactRepository") as MockRepo:
+        contact_repo = AsyncMock()
+        MockRepo.return_value = contact_repo
+        contact_repo.get_by_id.return_value = _make_list(id=7)
+        contact_repo.count_campaigns_using_list.return_value = 2
+
+        app.dependency_overrides[get_current_user_id] = _override_auth()
+        app.dependency_overrides[get_session] = _override_session()
+
+        client = TestClient(app)
+        resp = client.delete("/contacts/lists/7")
+
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 400
+    assert "2 campaign" in resp.json()["detail"]
+    contact_repo.delete_list.assert_not_awaited()
+
+
+def test_delete_contact_list_returns_404_when_missing():
+    with patch("app.routers.contacts.ContactRepository") as MockRepo:
+        contact_repo = AsyncMock()
+        MockRepo.return_value = contact_repo
+        contact_repo.get_by_id.return_value = None
+
+        app.dependency_overrides[get_current_user_id] = _override_auth()
+        app.dependency_overrides[get_session] = _override_session()
+
+        client = TestClient(app)
+        resp = client.delete("/contacts/lists/999")
+
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 404

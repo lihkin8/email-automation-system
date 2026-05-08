@@ -2,10 +2,18 @@
 import React from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import ContactImport from "./ContactImport";
 import * as api from "../services/api";
 
 jest.mock("../services/api");
+
+const renderImport = () =>
+  render(
+    <MemoryRouter>
+      <ContactImport />
+    </MemoryRouter>
+  );
 
 const MOCK_CONTACTS = [
   { name: "Jane Smith", email: "jane@google.com", company: "Google" },
@@ -18,7 +26,7 @@ describe("ContactImport", () => {
   });
 
   test("shows upload area initially", () => {
-    render(<ContactImport />);
+    renderImport();
     expect(screen.getByTestId("drop-zone")).toBeInTheDocument();
     expect(screen.getByTestId("file-input")).toBeInTheDocument();
     expect(screen.getByText(/drag and drop/i)).toBeInTheDocument();
@@ -30,7 +38,7 @@ describe("ContactImport", () => {
       errors: [],
     });
 
-    render(<ContactImport />);
+    renderImport();
     const fileInput = screen.getByTestId("file-input");
     const file = new File(["Google:\njane@google.com - Jane Smith\n"], "contacts.txt", {
       type: "text/plain",
@@ -51,7 +59,7 @@ describe("ContactImport", () => {
       errors: ["Line 3: missing '-' separator"],
     });
 
-    render(<ContactImport />);
+    renderImport();
     await userEvent.upload(screen.getByTestId("file-input"), new File(["x"], "c.txt"));
 
     await waitFor(() => {
@@ -63,7 +71,7 @@ describe("ContactImport", () => {
   test("confirm button is disabled when list name is empty", async () => {
     api.uploadContacts.mockResolvedValueOnce({ contacts: MOCK_CONTACTS, errors: [] });
 
-    render(<ContactImport />);
+    renderImport();
     await userEvent.upload(screen.getByTestId("file-input"), new File(["x"], "c.txt"));
 
     await waitFor(() => screen.getByText("Confirm Import"));
@@ -74,7 +82,7 @@ describe("ContactImport", () => {
     api.uploadContacts.mockResolvedValueOnce({ contacts: MOCK_CONTACTS, errors: [] });
     api.confirmImport.mockResolvedValueOnce({ contact_list_id: 1, imported_count: 2 });
 
-    render(<ContactImport />);
+    renderImport();
     await userEvent.upload(screen.getByTestId("file-input"), new File(["x"], "c.txt"));
 
     await waitFor(() => screen.getByLabelText(/list name/i));
