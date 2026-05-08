@@ -1,13 +1,11 @@
-from fastapi import HTTPException, status
+from fastapi import Depends
+
+from app.services.auth_service import get_current_user
 
 
-async def get_current_user_id() -> int:
-    """Returns the authenticated user's ID from the JWT session cookie.
+async def get_current_user_id(current_user=Depends(get_current_user)) -> int:
+    """Return the authenticated user's integer ID.
 
-    Stub implementation — replaced by real JWT auth in KAN-11.
-    All protected endpoints depend on this; override in tests.
+    Note: tests override this dependency to inject a fixed user_id.
     """
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Not authenticated",
-    )
+    return int(current_user.id)

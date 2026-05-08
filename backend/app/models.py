@@ -41,6 +41,12 @@ class EmailStatus(str, enum.Enum):
     SENT = "SENT"
     FAILED = "FAILED"
     
+class CampaignStatus(str, enum.Enum):
+    DRAFT = "DRAFT"
+    RUNNING = "RUNNING"
+    PAUSED = "PAUSED"
+    COMPLETED = "COMPLETED"
+
 class ContactList(Base):
     __tablename__ = 'contact_lists'
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -69,6 +75,7 @@ class Email(Base):
     __tablename__ = 'emails'
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    campaign_id = Column(Integer, ForeignKey('campaigns.id'), nullable=True)
     recruiter_id = Column(Integer, ForeignKey('recruiters.id'), nullable=False)
     email_type = Column(ENUM('MAIN', 'FOLLOW_UP', name='emailtype', create_type=False), nullable=False)
     subject = Column(String(255), nullable=False)
@@ -91,6 +98,24 @@ class Template(Base):
     subject = Column(String(255), nullable=False)
     body_html = Column(Text, nullable=False)
     variables = Column(JSONB, nullable=True)
+    created_at = Column(DateTime, default=get_pst_time)
+
+
+class Campaign(Base):
+    __tablename__ = "campaigns"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    name = Column(String(255), nullable=False)
+    template_id = Column(Integer, ForeignKey("templates.id"), nullable=False)
+    contact_list_id = Column(Integer, ForeignKey("contact_lists.id"), nullable=False)
+    follow_up_template_id = Column(Integer, ForeignKey("templates.id"), nullable=True)
+    follow_up_days = Column(Integer, default=5)
+    status = Column(
+        ENUM("DRAFT", "RUNNING", "PAUSED", "COMPLETED", name="campaignstatus", create_type=False),
+        nullable=False,
+        default=CampaignStatus.DRAFT,
+    )
     created_at = Column(DateTime, default=get_pst_time)
 
 
