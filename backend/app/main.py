@@ -13,9 +13,17 @@ app = FastAPI(title="Email Automation API")
 # the /auth/login redirect and the /auth/callback response.
 app.add_middleware(SessionMiddleware, secret_key=settings.jwt_secret)
 
+# Netlify gives PR previews and branch deploys subdomains like
+# `deploy-preview-21--callbackgetter.netlify.app` or
+# `feature-foo--callbackgetter.netlify.app`. Allow all of them in addition
+# to the canonical FRONTEND_URL so previews can hit the production API
+# without per-deploy backend env changes.
+NETLIFY_PREVIEW_ORIGIN_REGEX = r"https://[\w-]+--callbackgetter\.netlify\.app"
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.frontend_url],
+    allow_origin_regex=NETLIFY_PREVIEW_ORIGIN_REGEX,
     allow_methods=["*"],
     allow_headers=["*"],
     allow_credentials=True,
