@@ -158,3 +158,19 @@ async def test_campaign_delete_returns_false_for_missing_campaign():
     assert ok is False
     mock_session.delete.assert_not_awaited()
     mock_session.commit.assert_not_awaited()
+
+
+def test_email_and_tracking_fks_declare_cascade():
+    """Schema-side guard for the long-term cascade fix (migration 0007).
+
+    These ``ondelete='CASCADE'`` clauses keep ``Base.metadata.create_all``
+    (used by tests/dev) consistent with the production migration so the DB
+    handles ``DELETE FROM campaigns`` on its own.
+    """
+    from app.models import Email, EmailTracking
+
+    email_campaign_fk = next(iter(Email.__table__.c.campaign_id.foreign_keys))
+    assert email_campaign_fk.ondelete == "CASCADE"
+
+    tracking_email_fk = next(iter(EmailTracking.__table__.c.email_id.foreign_keys))
+    assert tracking_email_fk.ondelete == "CASCADE"
