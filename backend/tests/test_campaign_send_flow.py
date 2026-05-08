@@ -69,6 +69,8 @@ def test_send_campaign_happy_path_marks_completed_and_returns_counts():
     ) as MockDownload, patch(
         "app.routers.campaigns.GmailService"
     ) as MockGmail, patch(
+        "app.routers.campaigns.decrypt_token", return_value="plaintext-refresh-token"
+    ), patch(
         "app.routers.campaigns.CampaignSendService"
     ) as MockSendService:
         campaign_repo = AsyncMock()
@@ -89,6 +91,7 @@ def test_send_campaign_happy_path_marks_completed_and_returns_counts():
         email_repo.create_for_campaign.side_effect = [_make_email(100, "t1"), _make_email(101, "t2")]
         user = MagicMock()
         user.resume_url = "resumes/1/resume.pdf"
+        user.gmail_refresh_token = "encrypted-token"
         user_repo.get_by_id.return_value = user
         MockDownload.return_value = (b"%PDF-1.4...", "resume.pdf")
 
@@ -130,4 +133,44 @@ def test_send_campaign_returns_404_when_campaign_missing():
         app.dependency_overrides.clear()
 
     assert resp.status_code == 404
+
+
+def test_send_campaign_returns_400_when_gmail_not_connected():
+    """User must connect Gmail (refresh token in DB) before campaigns can send."""
+    with patch("app.routers.campaigns.CampaignRepository") as MockCampaignRepo, patch(
+        "app.routers.campaigns.TemplateRepository"
+    ) as MockTemplateRepo, patch(
+        "app.routers.campaigns.RecruiterRepository"
+    ) as MockRecruiterRepo, patch(
+        "app.routers.campaigns.UserRepository"
+    ) as MockUserRepo:
+        campaign_repo = AsyncMock()
+        template_repo = AsyncMock()
+        recruiter_repo = AsyncMock()
+        user_repo = AsyncMock()
+
+        MockCampaignRepo.return_value = campaign_repo
+        MockTemplateRepo.return_value = template_repo
+        MockRecruiterRepo.return_value = recruiter_repo
+        MockUserRepo.return_value = user_repo
+
+        campaign_repo.get_by_id.return_value = _make_campaign()
+        template_repo.get_by_id.return_value = _make_template()
+        recruiter_repo.get_by_contact_list.return_value = [_make_recruiter(1)]
+
+        user = MagicMock()
+        user.resume_url = None
+        user.gmail_refresh_token = None
+        user_repo.get_by_id.return_value = user
+
+        app.dependency_overrides[get_current_user_id] = _override_auth()
+        app.dependency_overrides[get_session] = _override_session()
+
+        client = TestClient(app)
+        resp = client.post("/campaigns/1/send")
+
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 400
+    assert "Gmail" in resp.json()["detail"]
 

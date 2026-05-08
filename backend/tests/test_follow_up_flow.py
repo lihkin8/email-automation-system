@@ -75,6 +75,8 @@ def test_manual_follow_up_run_happy_path_returns_counts():
     ) as MockDownload, patch(
         "app.routers.campaigns.GmailService"
     ), patch(
+        "app.routers.campaigns.decrypt_token", return_value="plaintext-refresh-token"
+    ), patch(
         "app.services.follow_up_service.FollowUpService"
     ) as MockFollowSvc:
         campaign_repo = AsyncMock()
@@ -97,6 +99,7 @@ def test_manual_follow_up_run_happy_path_returns_counts():
         email_repo.create_for_campaign.return_value = _make_follow_email()
         user = MagicMock()
         user.resume_url = "resumes/1/resume.pdf"
+        user.gmail_refresh_token = "encrypted-token"
         user_repo.get_by_id.return_value = user
         MockDownload.return_value = (b"%PDF-1.4...", "resume.pdf")
 
