@@ -118,3 +118,29 @@ def test_confirm_requires_auth():
         json={"list_name": "x", "source": "TEXT_FILE", "contacts": []},
     )
     assert response.status_code == 401
+
+
+def test_list_contact_lists_returns_rows():
+    mock_list = MagicMock()
+    mock_list.id = 7
+    mock_list.name = "List A"
+    mock_list.source = "TEXT_FILE"
+    mock_list.created_at = None
+
+    with patch("app.routers.contacts.ContactRepository") as MockRepo:
+        instance = AsyncMock()
+        MockRepo.return_value = instance
+        instance.list_contact_lists.return_value = [mock_list]
+
+        app.dependency_overrides[get_current_user_id] = _override_auth()
+        app.dependency_overrides[get_session] = _override_session()
+
+        client = TestClient(app)
+        response = client.get("/contacts/lists")
+
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data[0]["id"] == 7
+    assert data[0]["name"] == "List A"

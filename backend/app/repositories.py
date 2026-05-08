@@ -1,9 +1,11 @@
 # app/repositories.py
 from typing import Optional, List
 import datetime
+import uuid
 from sqlalchemy.future import select
+from sqlalchemy import func, case, exists
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models import Recruiter, Email, EmailTracking, EmailStatus, EmailType, User, ContactList, Template
+from app.models import Recruiter, Email, EmailTracking, EmailStatus, EmailType, User, ContactList, Template, Campaign
 from app.importers.base import RecruiterData
 
 class RecruiterRepository:
@@ -22,11 +24,25 @@ class RecruiterRepository:
         )
         return result.scalars().all()
 
+    async def get_by_id(self, recruiter_id: int, user_id: int) -> Optional[Recruiter]:
+        result = await self.session.execute(
+            select(Recruiter).where(Recruiter.id == recruiter_id, Recruiter.user_id == user_id)
+        )
+        return result.scalars().first()
+
     async def add(self, recruiter: Recruiter) -> Recruiter:
         self.session.add(recruiter)
         await self.session.commit()
         await self.session.refresh(recruiter)
         return recruiter
+
+    async def get_by_contact_list(self, contact_list_id: int, user_id: int) -> List[Recruiter]:
+        result = await self.session.execute(
+            select(Recruiter)
+            .where(Recruiter.contact_list_id == contact_list_id, Recruiter.user_id == user_id)
+            .order_by(Recruiter.created_at.desc())
+        )
+        return result.scalars().all()
 
 class EmailRepository:
     def __init__(self, session: AsyncSession):
@@ -81,6 +97,127 @@ class EmailRepository:
         )
         return result.scalars().all()
 
+    async def get_by_id(self, email_id: int) -> Optional[Email]:
+        result = await self.session.execute(select(Email).where(Email.id == email_id))
+        return result.scalars().first()
+
+    async def get_by_tracking_id(self, tracking_id: str) -> Optional[Email]:
+        result = await self.session.execute(select(Email).where(Email.tracking_id == tracking_id))
+        return result.scalars().first()
+
+    async def create_for_campaign(
+        self,
+        *,
+        user_id: int,
+        campaign_id: int,
+        recruiter_id: int,
+        subject: str,
+        email_type: EmailType,
+    ) -> Email:
+        email = Email(
+            user_id=user_id,
+            campaign_id=campaign_id,
+            recruiter_id=recruiter_id,
+            subject=subject,
+            email_type=email_type,
+            status=EmailStatus.PENDING,
+            tracking_id=str(uuid.uuid4()),
+        )
+        self.session.add(email)
+        await self.session.commit()
+        await self.session.refresh(email)
+        return email
+
+    async def get_unopened_main_emails_for_campaign(
+        self,
+        *,
+        campaign_id: int,
+        user_id: int,
+        cutoff_date: datetime.datetime,
+    ) -> List[Email]:
+        result = await self.session.execute(
+            select(Email)
+            .where(
+                Email.user_id == user_id,
+                Email.campaign_id == campaign_id,
+                Email.email_type == EmailType.MAIN,
+                Email.status == EmailStatus.SENT,
+                Email.is_opened == False,
+                Email.created_at < cutoff_date,
+            )
+        )
+        return result.scalars().all()
+
+    async def has_follow_up_for_recruiter_campaign(
+        self,
+        *,
+        user_id: int,
+        campaign_id: int,
+        recruiter_id: int,
+    ) -> bool:
+        result = await self.session.execute(
+            select(Email.id).where(
+                Email.user_id == user_id,
+                Email.campaign_id == campaign_id,
+                Email.recruiter_id == recruiter_id,
+                Email.email_type == EmailType.FOLLOW_UP,
+            )
+        )
+        return result.first() is not None
+
+    async def get_campaign_main_sent_opened_counts(self, *, user_id: int, campaign_id: int) -> tuple[int, int]:
+        stmt = select(
+            func.count(Email.id).label("sent"),
+            func.sum(case((Email.is_opened.is_(True), 1), else_=0)).label("opened"),
+        ).where(
+            Email.user_id == user_id,
+            Email.campaign_id == campaign_id,
+            Email.email_type == EmailType.MAIN,
+            Email.status == EmailStatus.SENT,
+        )
+        row = (await self.session.execute(stmt)).one()
+        sent = int(row.sent or 0)
+        opened = int(row.opened or 0)
+        return sent, opened
+
+    async def list_campaign_unopened(
+        self,
+        *,
+        user_id: int,
+        campaign_id: int,
+        cutoff_date: datetime.datetime | None,
+        exclude_followed_up: bool,
+    ) -> list[tuple[Recruiter, Email]]:
+        from app.models import Recruiter
+
+        stmt = (
+            select(Recruiter, Email)
+            .join(Email, Email.recruiter_id == Recruiter.id)
+            .where(
+                Recruiter.user_id == user_id,
+                Email.user_id == user_id,
+                Email.campaign_id == campaign_id,
+                Email.email_type == EmailType.MAIN,
+                Email.status == EmailStatus.SENT,
+                Email.is_opened.is_(False),
+            )
+            .order_by(Email.created_at.asc())
+        )
+        if cutoff_date is not None:
+            stmt = stmt.where(Email.created_at < cutoff_date)
+        if exclude_followed_up:
+            follow_up_exists = exists(
+                select(Email.id).where(
+                    Email.user_id == user_id,
+                    Email.campaign_id == campaign_id,
+                    Email.recruiter_id == Recruiter.id,
+                    Email.email_type == EmailType.FOLLOW_UP,
+                )
+            )
+            stmt = stmt.where(~follow_up_exists)
+        rows = (await self.session.execute(stmt)).all()
+        return [(r, e) for (r, e) in rows]
+
 class EmailTrackingRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -98,6 +235,24 @@ class EmailTrackingRepository:
             .order_by(EmailTracking.opened_at.desc())
         )
         return result.scalars().all()
+
+    async def add_open_event(
+        self,
+        user_id: int,
+        email_id: int,
+        user_agent: str | None,
+        ip_address: str | None,
+    ) -> EmailTracking:
+        tracking = EmailTracking(
+            user_id=user_id,
+            email_id=email_id,
+            user_agent=user_agent,
+            ip_address=ip_address,
+        )
+        self.session.add(tracking)
+        await self.session.commit()
+        await self.session.refresh(tracking)
+        return tracking
 
 
 class UserRepository:
@@ -190,6 +345,14 @@ class ContactRepository:
         await self.session.commit()
         return len(recruiters)
 
+    async def list_contact_lists(self, user_id: int) -> List[ContactList]:
+        result = await self.session.execute(
+            select(ContactList)
+            .where(ContactList.user_id == user_id)
+            .order_by(ContactList.created_at.desc())
+        )
+        return result.scalars().all()
+
 
 class TemplateRepository:
     def __init__(self, session: AsyncSession):
@@ -242,5 +405,67 @@ class TemplateRepository:
         if template is None:
             return False
         await self.session.delete(template)
+        await self.session.commit()
+        return True
+
+
+class CampaignRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create(
+        self,
+        user_id: int,
+        name: str,
+        template_id: int,
+        contact_list_id: int,
+        follow_up_template_id: int | None,
+        follow_up_days: int,
+        status: str,
+    ) -> Campaign:
+        campaign = Campaign(
+            user_id=user_id,
+            name=name,
+            template_id=template_id,
+            contact_list_id=contact_list_id,
+            follow_up_template_id=follow_up_template_id,
+            follow_up_days=follow_up_days,
+            status=status,
+        )
+        self.session.add(campaign)
+        await self.session.commit()
+        await self.session.refresh(campaign)
+        return campaign
+
+    async def get_all(self, user_id: int) -> List[Campaign]:
+        result = await self.session.execute(
+            select(Campaign)
+            .where(Campaign.user_id == user_id)
+            .order_by(Campaign.created_at.desc())
+        )
+        return result.scalars().all()
+
+    async def get_by_id(self, campaign_id: int, user_id: int) -> Optional[Campaign]:
+        result = await self.session.execute(
+            select(Campaign).where(Campaign.id == campaign_id, Campaign.user_id == user_id)
+        )
+        return result.scalars().first()
+
+    async def update(self, campaign_id: int, user_id: int, **fields) -> Optional[Campaign]:
+        campaign = await self.get_by_id(campaign_id, user_id)
+        if campaign is None:
+            return None
+        for key, value in fields.items():
+            if value is not None:
+                setattr(campaign, key, value)
+        await self.session.commit()
+        await self.session.refresh(campaign)
+        return campaign
+
+    async def delete(self, campaign_id: int, user_id: int) -> bool:
+        campaign = await self.get_by_id(campaign_id, user_id)
+        if campaign is None:
+            return False
+        await self.session.delete(campaign)
         await self.session.commit()
         return True
