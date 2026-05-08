@@ -551,9 +551,39 @@ class CampaignRepository:
         return campaign
 
     async def delete(self, campaign_id: int, user_id: int) -> bool:
+        """Delete a campaign and all of its dependent rows.
+
+        Postgres enforces FK constraints on ``emails.campaign_id`` and
+        ``email_tracking.email_id`` (no ``ON DELETE CASCADE`` in the
+        schema), so we cascade in the application layer in the right
+        order: tracking events, then emails, then the campaign.
+        """
         campaign = await self.get_by_id(campaign_id, user_id)
         if campaign is None:
             return False
+
+        email_ids_result = await self.session.execute(
+            select(Email.id).where(
+                Email.campaign_id == campaign_id,
+                Email.user_id == user_id,
+            )
+        )
+        email_ids = [row[0] for row in email_ids_result.all()]
+
+        if email_ids:
+            await self.session.execute(
+                delete(EmailTracking).where(
+                    EmailTracking.email_id.in_(email_ids),
+                    EmailTracking.user_id == user_id,
+                )
+            )
+            await self.session.execute(
+                delete(Email).where(
+                    Email.campaign_id == campaign_id,
+                    Email.user_id == user_id,
+                )
+            )
+
         await self.session.delete(campaign)
         await self.session.commit()
         return True

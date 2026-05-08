@@ -75,7 +75,7 @@ class Email(Base):
     __tablename__ = 'emails'
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    campaign_id = Column(Integer, ForeignKey('campaigns.id'), nullable=True)
+    campaign_id = Column(Integer, ForeignKey('campaigns.id', ondelete='CASCADE'), nullable=True)
     recruiter_id = Column(Integer, ForeignKey('recruiters.id'), nullable=False)
     email_type = Column(ENUM('MAIN', 'FOLLOW_UP', name='emailtype', create_type=False), nullable=False)
     subject = Column(String(255), nullable=False)
@@ -123,7 +123,7 @@ class EmailTracking(Base):
     __tablename__ = 'email_tracking'
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    email_id = Column(Integer, ForeignKey('emails.id'), nullable=False)
+    email_id = Column(Integer, ForeignKey('emails.id', ondelete='CASCADE'), nullable=False)
     opened_at = Column(DateTime, default=get_pst_time)
     user_agent = Column(String(512))
     ip_address = Column(String(45))
