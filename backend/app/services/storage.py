@@ -1,5 +1,6 @@
 import boto3
 from app.config import settings
+from typing import Tuple
 
 r2_client = boto3.client(
     "s3",
@@ -29,3 +30,11 @@ def get_presigned_url(key: str, expires_in: int = 3600) -> str:
         Params={"Bucket": settings.r2_bucket_name, "Key": key},
         ExpiresIn=expires_in,
     )
+
+
+def download_resume(key: str) -> Tuple[bytes, str]:
+    """Download the resume object bytes from R2. Returns (content_bytes, filename)."""
+    obj = r2_client.get_object(Bucket=settings.r2_bucket_name, Key=key)
+    content: bytes = obj["Body"].read()
+    filename = key.split("/")[-1] if key else "resume"
+    return content, filename

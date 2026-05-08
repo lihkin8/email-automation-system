@@ -3,6 +3,7 @@ import base64
 import logging
 import asyncio
 import os
+import mimetypes
 from concurrent.futures import ThreadPoolExecutor
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -39,16 +40,27 @@ class GmailService:
 
             if attachments:
                 logger.info(f"Processing {len(attachments)} attachments")
-                for file_path in attachments:
+                for attachment in attachments:
                     try:
-                        logger.info(f"Attaching file: {file_path}")
-                        with open(file_path, 'rb') as f:
-                            part = MIMEApplication(f.read(), Name=os.path.basename(file_path))
-                        part['Content-Disposition'] = f'attachment; filename="{os.path.basename(file_path)}"'
+                        # attachment can be either a file path (str) or a tuple (filename, bytes, mime_type)
+                        if isinstance(attachment, str):
+                            file_path = attachment
+                            logger.info(f"Attaching file: {file_path}")
+                            with open(file_path, 'rb') as f:
+                                data = f.read()
+                            filename = os.path.basename(file_path)
+                            mime_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+                        else:
+                            filename, data, mime_type = attachment
+                            logger.info(f"Attaching in-memory file: {filename}")
+
+                        subtype = (mime_type.split("/", 1)[1] if "/" in mime_type else "octet-stream")
+                        part = MIMEApplication(data, _subtype=subtype, Name=filename)
+                        part['Content-Disposition'] = f'attachment; filename="{filename}"'
                         message.attach(part)
-                        logger.info(f"Successfully attached: {file_path}")
+                        logger.info(f"Successfully attached: {filename}")
                     except Exception as e:
-                        logger.error(f"Error attaching file {file_path}: {str(e)}")
+                        logger.error(f"Error attaching file: {str(e)}")
                         raise
 
             raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')

@@ -58,6 +58,11 @@ export const confirmImport = async ({ listName, source, contacts }) => {
   return response.data;
 };
 
+export const listContactLists = async () => {
+  const r = await api.get("/contacts/lists");
+  return r.data;
+};
+
 // ── Templates ─────────────────────────────────────────────────────────────────
 
 export const listTemplates = async () => {
@@ -77,6 +82,54 @@ export const updateTemplate = async (id, data) => {
 
 export const deleteTemplate = async (id) => {
   await api.delete(`/templates/${id}`);
+};
+
+// ── Campaigns (KAN-26/28/29) ──────────────────────────────────────────────────
+
+export const listCampaigns = async () => {
+  const r = await api.get("/campaigns");
+  return r.data;
+};
+
+export const getCampaignPreview = async (campaignId) => {
+  const r = await api.get(`/campaigns/${campaignId}/preview`);
+  return r.data;
+};
+
+export const getCampaignMetrics = async (campaignId) => {
+  const r = await api.get(`/campaigns/${campaignId}/metrics`);
+  return r.data;
+};
+
+export const getCampaignUnopened = async (campaignId, params = {}) => {
+  const r = await api.get(`/campaigns/${campaignId}/unopened`, { params });
+  return r.data;
+};
+
+export const getCampaignContactOpens = async (campaignId, recruiterId) => {
+  const r = await api.get(`/campaigns/${campaignId}/contacts/${recruiterId}/opens`);
+  return r.data;
+};
+
+export const sendCampaign = async (campaignId, delaySeconds = 2.0) => {
+  const r = await api.post(`/campaigns/${campaignId}/send`, null, {
+    params: { delay_seconds: delaySeconds },
+  });
+  return r.data;
+};
+
+export const createCampaign = async (data) => {
+  const r = await api.post("/campaigns", data);
+  return r.data;
+};
+
+export const updateCampaign = async (id, data) => {
+  const r = await api.put(`/campaigns/${id}`, data);
+  return r.data;
+};
+
+export const deleteCampaign = async (id) => {
+  await api.delete(`/campaigns/${id}`);
 };
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -113,4 +166,11 @@ export const uploadResume = async (file, onProgress) => {
 
 export const deleteResume = async () => {
   await api.delete("/users/resume");
+};
+
+// ── Onboarding ────────────────────────────────────────────────────────────────
+
+export const fetchOnboardingStatus = async () => {
+  const r = await api.get("/onboarding/status");
+  return r.data;
 };

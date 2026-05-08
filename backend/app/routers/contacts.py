@@ -74,6 +74,13 @@ class ConfirmImportResponse(BaseModel):
     imported_count: int
 
 
+class ContactListOut(BaseModel):
+    id: int
+    name: str
+    source: str
+    created_at: str | None = None
+
+
 @router.post("", status_code=201, response_model=ConfirmImportResponse)
 async def confirm_import(
     body: ConfirmImportRequest,
@@ -91,3 +98,21 @@ async def confirm_import(
     ]
     count = await repo.bulk_create_recruiters(contact_list.id, user_id, recruiter_data)
     return ConfirmImportResponse(contact_list_id=contact_list.id, imported_count=count)
+
+
+@router.get("/lists", response_model=list[ContactListOut])
+async def list_contact_lists(
+    user_id: int = Depends(get_current_user_id),
+    session: AsyncSession = Depends(get_session),
+):
+    repo = ContactRepository(session)
+    lists = await repo.list_contact_lists(user_id)
+    return [
+        ContactListOut(
+            id=l.id,
+            name=l.name,
+            source=l.source,
+            created_at=(l.created_at.isoformat() if getattr(l, "created_at", None) else None),
+        )
+        for l in lists
+    ]
