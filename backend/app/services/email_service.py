@@ -31,6 +31,29 @@ class GmailService:
         creds = flow.run_local_server(port=0)
         return build('gmail', 'v1', credentials=creds)
 
+    @classmethod
+    def from_refresh_token(cls, refresh_token: str) -> "GmailService":
+        """Build a GmailService from a stored per-user OAuth refresh token.
+
+        Used by the API server, where each user has their own Gmail OAuth
+        grant captured at /auth/callback and stored Fernet-encrypted on the
+        users table. This bypasses the legacy file-based desktop flow in
+        __init__ which cannot run in a server environment (no local browser,
+        no port to bind, no credentials.json on disk).
+        """
+        instance = cls.__new__(cls)
+        instance.credentials_path = None
+        creds = Credentials(
+            token=None,
+            refresh_token=refresh_token,
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=settings.google_client_id,
+            client_secret=settings.google_client_secret,
+            scopes=cls.SCOPES,
+        )
+        instance.service = build("gmail", "v1", credentials=creds)
+        return instance
+
     def _send_email_sync(self, to_email: str, subject: str, body: str, attachments: list = None) -> bool:
         try:
             message = MIMEMultipart()

@@ -23,6 +23,7 @@ from app.models import EmailType, EmailStatus
 from app.services.email_service import GmailService
 from app.services.campaign_send_service import CampaignSendService, inject_tracking_pixel
 from app.services import storage
+from app.services.auth_service import decrypt_token
 
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
 
@@ -209,13 +210,20 @@ async def send_campaign(
     recruiters = await recruiter_repo.get_by_contact_list(campaign.contact_list_id, user_id)
 
     user = await user_repo.get_by_id(user_id)
+    if user is None or not user.gmail_refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Gmail is not connected. Please connect Gmail in Settings before sending.",
+        )
+
     attachments = None
-    if user is not None and user.resume_url:
+    if user.resume_url:
         content, filename = storage.download_resume(user.resume_url)
         mime_type = "application/pdf"
         attachments = [(filename, content, mime_type)]
 
-    gmail = GmailService(settings.gmail_credentials_path)
+    refresh_token = decrypt_token(user.gmail_refresh_token)
+    gmail = GmailService.from_refresh_token(refresh_token)
     sender = CampaignSendService(gmail)
 
     items: list[tuple[str, str, str]] = []
@@ -284,15 +292,22 @@ async def run_follow_ups(
         cutoff_date=cutoff,
     )
 
-    gmail = GmailService(settings.gmail_credentials_path)
-    svc = FollowUpService(gmail)
-
     user = await user_repo.get_by_id(user_id)
+    if user is None or not user.gmail_refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Gmail is not connected. Please connect Gmail in Settings before sending follow-ups.",
+        )
+
     attachments = None
-    if user is not None and user.resume_url:
+    if user.resume_url:
         content, filename = storage.download_resume(user.resume_url)
         mime_type = "application/pdf"
         attachments = [(filename, content, mime_type)]
+
+    refresh_token = decrypt_token(user.gmail_refresh_token)
+    gmail = GmailService.from_refresh_token(refresh_token)
+    svc = FollowUpService(gmail)
 
     items: list[tuple[str, str, str]] = []
     follow_up_email_ids: list[int] = []
