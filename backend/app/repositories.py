@@ -5,7 +5,7 @@ import uuid
 from sqlalchemy.future import select
 from sqlalchemy import func, case, exists, delete
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models import Recruiter, Email, EmailTracking, EmailStatus, EmailType, User, ContactList, Template, Campaign
+from app.models import Recruiter, Email, EmailTracking, EmailStatus, EmailType, User, ContactList, Template, Campaign, get_pst_time
 from app.importers.base import RecruiterData
 
 class RecruiterRepository:
@@ -58,7 +58,10 @@ class EmailRepository:
         result = await self.session.execute(select(Email).where(Email.id == email_id))
         email_obj = result.scalars().first()
         if email_obj:
+            previous_status = email_obj.status
             email_obj.status = status
+            if status == EmailStatus.SENT and previous_status != EmailStatus.SENT:
+                email_obj.sent_at = get_pst_time()
             await self.session.commit()
             return email_obj
         return None
@@ -179,6 +182,28 @@ class EmailRepository:
         sent = int(row.sent or 0)
         opened = int(row.opened or 0)
         return sent, opened
+
+    async def get_campaign_status_counts(
+        self,
+        *,
+        user_id: int,
+        campaign_id: int,
+        email_type: EmailType,
+    ) -> dict[EmailStatus, int]:
+        stmt = (
+            select(Email.status.label("status"), func.count(Email.id).label("count"))
+            .where(
+                Email.user_id == user_id,
+                Email.campaign_id == campaign_id,
+                Email.email_type == email_type,
+            )
+            .group_by(Email.status)
+        )
+        rows = (await self.session.execute(stmt)).all()
+        counts = {status: 0 for status in EmailStatus}
+        for row in rows:
+            counts[EmailStatus(row.status)] = int(row.count or 0)
+        return counts
 
     async def list_campaign_unopened(
         self,

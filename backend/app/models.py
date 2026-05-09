@@ -82,6 +82,7 @@ class Email(Base):
     status = Column(ENUM('PENDING', 'SENT', 'FAILED', name='emailstatus', create_type=False), nullable=False)
     tracking_id = Column(String(255), unique=True)
     created_at = Column(DateTime, default=get_pst_time)
+    sent_at = Column(DateTime, nullable=True)
     is_opened = Column(Boolean, default=False)
 
     # Add these relationship definitions back

@@ -9,9 +9,13 @@ These endpoints are intentionally unauthenticated (email clients call them),
 but they validate ownership via DB lookups before writing tracking events.
 """
 
+import datetime
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_session
 from app.repositories import EmailRepository, EmailTrackingRepository
 
@@ -35,6 +39,8 @@ _GIF_1X1_TRANSPARENT = (
     b";"  # trailer
 )
 
+_GMAIL_PROXY_UA_RE = re.compile(r"googleimageproxy|ggpht|googleusercontent", re.IGNORECASE)
+
 
 def _gif_response() -> Response:
     return Response(
@@ -45,6 +51,23 @@ def _gif_response() -> Response:
             "Pragma": "no-cache",
         },
     )
+
+
+def _seconds_since_sent(sent_at: datetime.datetime | None, now: datetime.datetime) -> float | None:
+    if sent_at is None:
+        return None
+    return (now - sent_at).total_seconds()
+
+
+def _should_ignore_open(sent_at: datetime.datetime | None, user_agent: str | None) -> bool:
+    seconds_since_sent = _seconds_since_sent(sent_at, datetime.datetime.now())
+    if seconds_since_sent is None:
+        return False
+    if seconds_since_sent < settings.tracking_ignore_window_seconds:
+        return True
+    if user_agent and _GMAIL_PROXY_UA_RE.search(user_agent) and seconds_since_sent < 30:
+        return True
+    return False
 
 
 @router.get("/{user_id}/{tracking_id}.gif")
@@ -61,36 +84,25 @@ async def track_open_gif(
     if email_obj is None or int(email_obj.user_id) != int(user_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
-    await tracking_repo.add_open_event(
-        user_id=int(email_obj.user_id),
-        email_id=int(email_obj.id),
-        user_agent=request.headers.get("user-agent"),
-        ip_address=request.client.host if request.client else None,
-    )
-    await email_repo.update_opened_status(int(email_obj.id), True)
+    user_agent = request.headers.get("user-agent")
+    if not _should_ignore_open(getattr(email_obj, "sent_at", None), user_agent):
+        await tracking_repo.add_open_event(
+            user_id=int(email_obj.user_id),
+            email_id=int(email_obj.id),
+            user_agent=user_agent,
+            ip_address=request.client.host if request.client else None,
+        )
+        await email_repo.update_opened_status(int(email_obj.id), True)
     return _gif_response()
 
 
 @router.get("/pixel")
 async def track_open_compat(
     email_id: int,
-    request: Request,
-    session: AsyncSession = Depends(get_session),
 ):
-    """Compatibility endpoint used by the current EmailService implementation."""
-    email_repo = EmailRepository(session)
-    tracking_repo = EmailTrackingRepository(session)
-
-    email_obj = await email_repo.get_by_id(email_id)
-    if email_obj is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-
-    await tracking_repo.add_open_event(
-        user_id=int(email_obj.user_id),
-        email_id=int(email_obj.id),
-        user_agent=request.headers.get("user-agent"),
-        ip_address=request.client.host if request.client else None,
+    """Deprecated compatibility endpoint for old pixel URLs."""
+    return Response(
+        status_code=status.HTTP_410_GONE,
+        headers={"X-Deprecated": "use /track/{user_id}/{tracking_id}.gif"},
     )
-    await email_repo.update_opened_status(int(email_obj.id), True)
-    return _gif_response()
 

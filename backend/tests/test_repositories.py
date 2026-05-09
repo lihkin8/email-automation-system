@@ -1,4 +1,5 @@
 """Tests for repository methods."""
+import datetime
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -174,3 +175,63 @@ def test_email_and_tracking_fks_declare_cascade():
 
     tracking_email_fk = next(iter(EmailTracking.__table__.c.email_id.foreign_keys))
     assert tracking_email_fk.ondelete == "CASCADE"
+
+
+def test_email_model_declares_nullable_sent_at():
+    from app.models import Email
+
+    assert "sent_at" in Email.__table__.c
+    assert Email.__table__.c.sent_at.nullable is True
+
+
+@pytest.mark.asyncio
+async def test_email_update_status_sets_sent_at_when_sent():
+    from app.models import EmailStatus
+    from app.repositories import EmailRepository
+
+    mock_email = MagicMock()
+    mock_email.status = EmailStatus.PENDING
+    mock_email.sent_at = None
+
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.first.return_value = mock_email
+
+    mock_session = AsyncMock()
+    mock_session.execute.return_value = mock_result
+
+    before = datetime.datetime.now()
+    repo = EmailRepository(mock_session)
+    await repo.update_status(1, EmailStatus.SENT)
+    after = datetime.datetime.now()
+
+    assert mock_email.status == EmailStatus.SENT
+    assert before <= mock_email.sent_at <= after
+    mock_session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_email_get_campaign_status_counts_returns_all_statuses():
+    from app.models import EmailStatus
+    from app.repositories import EmailRepository
+
+    row_pending = MagicMock()
+    row_pending.status = EmailStatus.PENDING
+    row_pending.count = 2
+    row_sent = MagicMock()
+    row_sent.status = EmailStatus.SENT
+    row_sent.count = 3
+
+    mock_result = MagicMock()
+    mock_result.all.return_value = [row_pending, row_sent]
+
+    mock_session = AsyncMock()
+    mock_session.execute.return_value = mock_result
+
+    repo = EmailRepository(mock_session)
+    counts = await repo.get_campaign_status_counts(user_id=1, campaign_id=2, email_type="MAIN")
+
+    assert counts == {
+        EmailStatus.PENDING: 2,
+        EmailStatus.SENT: 3,
+        EmailStatus.FAILED: 0,
+    }

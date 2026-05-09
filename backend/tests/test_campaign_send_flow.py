@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.dependencies import get_current_user_id
 from app.database import get_session
+from app.models import EmailStatus
+from app.services.campaign_send_service import SendItemResult
 
 
 def _override_auth(user_id: int = 1):
@@ -97,7 +99,10 @@ def test_send_campaign_happy_path_marks_completed_and_returns_counts():
 
         send_service = AsyncMock()
         MockSendService.return_value = send_service
-        send_service.send_html_batch.return_value = MagicMock(sent=2, failed=0)
+        send_service.send_html_batch.return_value = [
+            SendItemResult(to_email="a@example.com", ok=True),
+            SendItemResult(to_email="a@example.com", ok=True),
+        ]
 
         app.dependency_overrides[get_current_user_id] = _override_auth()
         app.dependency_overrides[get_session] = _override_session()
@@ -195,7 +200,10 @@ def test_send_campaign_renders_template_variables_per_recipient():
 
         send_service = AsyncMock()
         MockSendService.return_value = send_service
-        send_service.send_html_batch.return_value = MagicMock(sent=2, failed=0)
+        send_service.send_html_batch.return_value = [
+            SendItemResult(to_email="jane@acme.com", ok=True),
+            SendItemResult(to_email="bob@beta.com", ok=True),
+        ]
 
         app.dependency_overrides[get_current_user_id] = _override_auth()
         app.dependency_overrides[get_session] = _override_session()
@@ -263,4 +271,78 @@ def test_send_campaign_returns_400_when_gmail_not_connected():
 
     assert resp.status_code == 400
     assert "Gmail" in resp.json()["detail"]
+
+
+def test_send_campaign_marks_exact_failed_recipient_from_per_item_results():
+    """A middle failure must mark that exact email FAILED, not the final email."""
+    with patch("app.routers.campaigns.CampaignRepository") as MockCampaignRepo, patch(
+        "app.routers.campaigns.TemplateRepository"
+    ) as MockTemplateRepo, patch(
+        "app.routers.campaigns.RecruiterRepository"
+    ) as MockRecruiterRepo, patch(
+        "app.routers.campaigns.EmailRepository"
+    ) as MockEmailRepo, patch(
+        "app.routers.campaigns.UserRepository"
+    ) as MockUserRepo, patch(
+        "app.routers.campaigns.GmailService"
+    ), patch(
+        "app.routers.campaigns.decrypt_token", return_value="plaintext-refresh-token"
+    ), patch(
+        "app.routers.campaigns.CampaignSendService"
+    ) as MockSendService:
+        campaign_repo = AsyncMock()
+        template_repo = AsyncMock()
+        recruiter_repo = AsyncMock()
+        email_repo = AsyncMock()
+        user_repo = AsyncMock()
+
+        MockCampaignRepo.return_value = campaign_repo
+        MockTemplateRepo.return_value = template_repo
+        MockRecruiterRepo.return_value = recruiter_repo
+        MockEmailRepo.return_value = email_repo
+        MockUserRepo.return_value = user_repo
+
+        campaign_repo.get_by_id.return_value = _make_campaign()
+        template_repo.get_by_id.return_value = _make_template()
+        recruiter_repo.get_by_contact_list.return_value = [
+            _make_recruiter(1, "first@example.com"),
+            _make_recruiter(2, "second@example.com"),
+            _make_recruiter(3, "third@example.com"),
+        ]
+        email_repo.create_for_campaign.side_effect = [
+            _make_email(100, "t1"),
+            _make_email(101, "t2"),
+            _make_email(102, "t3"),
+        ]
+
+        user = MagicMock()
+        user.name = "Nikhil"
+        user.resume_url = None
+        user.gmail_refresh_token = "encrypted-token"
+        user_repo.get_by_id.return_value = user
+
+        send_service = AsyncMock()
+        MockSendService.return_value = send_service
+        send_service.send_html_batch.return_value = [
+            SendItemResult(to_email="first@example.com", ok=True),
+            SendItemResult(to_email="second@example.com", ok=False, error_message="boom"),
+            SendItemResult(to_email="third@example.com", ok=True),
+        ]
+
+        app.dependency_overrides[get_current_user_id] = _override_auth()
+        app.dependency_overrides[get_session] = _override_session()
+
+        client = TestClient(app)
+        resp = client.post("/campaigns/1/send", params={"delay_seconds": 0})
+
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 200
+    assert resp.json()["sent"] == 2
+    assert resp.json()["failed"] == 1
+    assert [call.args for call in email_repo.update_status.await_args_list] == [
+        (100, EmailStatus.SENT),
+        (101, EmailStatus.FAILED),
+        (102, EmailStatus.SENT),
+    ]
 

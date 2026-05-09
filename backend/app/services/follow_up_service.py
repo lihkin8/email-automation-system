@@ -1,16 +1,7 @@
-import datetime
-from dataclasses import dataclass
+from collections.abc import Awaitable, Callable
 
-from app.models import EmailType, EmailStatus
 from app.services.email_service import GmailService
-from app.services.campaign_send_service import inject_tracking_pixel
-from app.config import settings
-
-
-@dataclass(frozen=True)
-class FollowUpResult:
-    sent: int
-    failed: int
+from app.services.campaign_send_service import SendItemResult
 
 
 class FollowUpService:
@@ -23,18 +14,24 @@ class FollowUpService:
         items: list[tuple[str, str, str]],
         delay_seconds: float,
         attachments: list | None = None,
-    ) -> FollowUpResult:
-        sent = 0
-        failed = 0
-        for to_email, subject, body_html in items:
-            ok = await self.gmail_service.send_email(to_email, subject, body_html, attachments=attachments)
-            if ok:
-                sent += 1
-            else:
-                failed += 1
+        on_progress: Callable[[int, SendItemResult], Awaitable[None]] | None = None,
+    ) -> list[SendItemResult]:
+        results: list[SendItemResult] = []
+        for index, (to_email, subject, body_html) in enumerate(items):
+            error_message = None
+            try:
+                ok = await self.gmail_service.send_email(to_email, subject, body_html, attachments=attachments)
+            except Exception as exc:
+                ok = False
+                error_message = str(exc)
+
+            item_result = SendItemResult(to_email=to_email, ok=bool(ok), error_message=error_message)
+            results.append(item_result)
+            if on_progress is not None:
+                await on_progress(index, item_result)
             if delay_seconds:
                 import asyncio
 
                 await asyncio.sleep(delay_seconds)
-        return FollowUpResult(sent=sent, failed=failed)
+        return results
 
