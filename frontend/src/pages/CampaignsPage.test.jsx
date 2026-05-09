@@ -1,56 +1,68 @@
 import React from "react";
+import { describe, test, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+
 import CampaignsPage from "./CampaignsPage";
 
-jest.mock("../services/api", () => ({
-  listCampaigns: jest.fn(),
-  listTemplates: jest.fn(),
-  listContactLists: jest.fn(),
-  createCampaign: jest.fn(),
-  getCampaignPreview: jest.fn(),
-  getCampaignMetrics: jest.fn(),
-  getCampaignUnopened: jest.fn(),
-  sendCampaign: jest.fn(),
+vi.mock("@/lib/api", () => ({
+  listCampaigns: vi.fn(),
+  listTemplates: vi.fn(),
+  listContactLists: vi.fn(),
+  createCampaign: vi.fn(),
+  getCampaignPreview: vi.fn(),
+  getCampaignMetrics: vi.fn(),
+  getCampaignUnopened: vi.fn(),
+  sendCampaign: vi.fn(),
+  runCampaignFollowUps: vi.fn(),
+  deleteCampaign: vi.fn(),
 }));
+
+vi.mock("sonner", () => ({
+  toast: {
+    loading: vi.fn(() => "tid"),
+    success: vi.fn(),
+    error: vi.fn(),
+    promise: vi.fn(),
+  },
+}));
+
+vi.mock("canvas-confetti", () => ({ default: vi.fn() }));
 
 import {
   listCampaigns,
   listTemplates,
   listContactLists,
-  getCampaignPreview,
-  getCampaignMetrics,
-  getCampaignUnopened,
-} from "../services/api";
+} from "@/lib/api";
 
 describe("CampaignsPage", () => {
-  test("renders and loads campaigns", async () => {
-    listCampaigns.mockResolvedValue([{ id: 1, name: "C1" }]);
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test("renders the page and lists campaigns", async () => {
+    listCampaigns.mockResolvedValue([
+      {
+        id: 1,
+        name: "C1",
+        template_id: 10,
+        contact_list_id: 20,
+        follow_up_template_id: null,
+        follow_up_days: 5,
+        created_at: "2026-04-04T12:00:00",
+      },
+    ]);
     listTemplates.mockResolvedValue([{ id: 10, name: "T1" }]);
     listContactLists.mockResolvedValue([{ id: 20, name: "L1" }]);
-    getCampaignPreview.mockResolvedValue({
-      sample_contact: { name: "A", email: "a@x.com", company: "X" },
-      subject_rendered: "Hi",
-      body_html_rendered: "<p>Body</p>",
-      resolved_variables: {},
-    });
-    getCampaignMetrics.mockResolvedValue({
-      sent_main_count: 0,
-      opened_main_count: 0,
-      open_rate_pct: 0,
-    });
-    getCampaignUnopened.mockResolvedValue([]);
 
     render(<CampaignsPage />);
 
     await waitFor(() => {
       expect(screen.getByText("Campaigns")).toBeInTheDocument();
     });
-
     await waitFor(() => {
       expect(listCampaigns).toHaveBeenCalled();
-      expect(screen.getByText("Create campaign")).toBeInTheDocument();
-      expect(screen.getByText("Unopened contacts")).toBeInTheDocument();
+      expect(screen.getAllByText("Create campaign").length).toBeGreaterThan(0);
+      expect(screen.getByText("C1")).toBeInTheDocument();
     });
   });
 });
-

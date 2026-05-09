@@ -1,84 +1,84 @@
 import React from "react";
+
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
+  TableHeader,
   TableRow,
-  Paper,
-  Typography,
-  Chip,
-} from "@mui/material";
+} from "@/components/ui/table";
 
-const CompanyAnalytics = ({ analytics }) => {
+const STATUS_VARIANT = { SENT: "success", FAILED: "destructive" };
+
+export default function CompanyAnalytics({ analytics }) {
+  const rows = analytics ?? [];
   return (
-    <TableContainer
-      component={Paper}
-      style={{
-        marginTop: "2rem",
-        boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-        borderRadius: "8px",
-      }}
-    >
-      <Typography variant="h6" style={{ padding: "1rem" }}>
-        Company-wise Email Analytics
-      </Typography>
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
       <Table>
-        <TableHead>
-          <TableRow style={{ backgroundColor: "#f5f5f5" }}>
-            <TableCell style={{ fontWeight: "bold" }}>Company</TableCell>
-            <TableCell style={{ fontWeight: "bold" }}>Total Emails</TableCell>
-            <TableCell style={{ fontWeight: "bold" }}>Opened</TableCell>
-            <TableCell style={{ fontWeight: "bold" }}>Open Rate</TableCell>
-            <TableCell style={{ fontWeight: "bold" }}>Follow-ups</TableCell>
-            <TableCell style={{ fontWeight: "bold" }}>Total Opens</TableCell>
-            <TableCell style={{ fontWeight: "bold" }}>
-              Last Interaction
-            </TableCell>
-            <TableCell style={{ fontWeight: "bold" }}>Statuses</TableCell>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Company</TableHead>
+            <TableHead className="text-right">Sent</TableHead>
+            <TableHead className="text-right">Opened</TableHead>
+            <TableHead className="text-right">Open rate</TableHead>
+            <TableHead className="text-right">Follow-ups</TableHead>
+            <TableHead className="text-right">Total opens</TableHead>
+            <TableHead>Last interaction</TableHead>
+            <TableHead>Statuses</TableHead>
           </TableRow>
-        </TableHead>
+        </TableHeader>
         <TableBody>
-          {analytics?.map((row) => (
-            <TableRow
-              key={row.company}
-              sx={{ "&:hover": { backgroundColor: "#f5f5f5" } }}
-            >
-              <TableCell>{row.company}</TableCell>
-              <TableCell>{row.total_emails}</TableCell>
-              <TableCell>{row.opened_emails}</TableCell>
-              <TableCell>
-                {((row.opened_emails / row.total_emails) * 100).toFixed(1)}%
-              </TableCell>
-              <TableCell>{row.follow_ups}</TableCell>
-              <TableCell>{row.total_opens}</TableCell>
-              <TableCell>
-                {row.last_interaction
-                  ? new Date(row.last_interaction).toLocaleString()
-                  : "N/A"}
-              </TableCell>
-              <TableCell>
-                {row.email_statuses.split(", ").map((status) => (
-                  <Chip
-                    key={status}
-                    label={status}
-                    size="small"
-                    style={{
-                      margin: "2px",
-                      backgroundColor:
-                        status === "SENT" ? "#4caf50" : "#f44336",
-                      color: "white",
-                    }}
-                  />
-                ))}
+          {rows.length === 0 ? (
+            <TableRow>
+              <TableCell
+                colSpan={8}
+                className="py-10 text-center text-sm text-muted-foreground"
+              >
+                No analytics yet.
               </TableCell>
             </TableRow>
-          ))}
+          ) : (
+            rows.map((row) => (
+              <TableRow key={row.company}>
+                <TableCell className="font-medium text-foreground">
+                  {row.company}
+                </TableCell>
+                <TableCell className="text-right">{row.total_emails}</TableCell>
+                <TableCell className="text-right">{row.opened_emails}</TableCell>
+                <TableCell className="text-right">
+                  {row.total_emails
+                    ? `${((row.opened_emails / row.total_emails) * 100).toFixed(1)}%`
+                    : "—"}
+                </TableCell>
+                <TableCell className="text-right">{row.follow_ups}</TableCell>
+                <TableCell className="text-right">{row.total_opens}</TableCell>
+                <TableCell className="whitespace-nowrap text-muted-foreground">
+                  {row.last_interaction
+                    ? new Date(row.last_interaction).toLocaleString()
+                    : "—"}
+                </TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap gap-1">
+                    {(row.email_statuses || "")
+                      .split(", ")
+                      .filter(Boolean)
+                      .map((status) => (
+                        <Badge
+                          key={status}
+                          variant={STATUS_VARIANT[status] ?? "secondary"}
+                        >
+                          {status}
+                        </Badge>
+                      ))}
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))
+          )}
         </TableBody>
       </Table>
-    </TableContainer>
+    </div>
   );
-};
-
-export default CompanyAnalytics;
+}

@@ -1,0 +1,39 @@
+---
+description: Always-on project memory for email-automation-system
+alwaysApply: true
+---
+
+## Project Memory (email-automation-system)
+
+### What this repo is
+- **Goal**: multi-user email automation SaaS (Gmail OAuth, contact import, templates, campaigns, tracking, follow-ups).
+- **Backend**: FastAPI + async SQLAlchemy + Alembic migrations.
+- **Frontend**: Vite + React 19 + React Router + Tailwind CSS v3 + shadcn/ui (Zinc/Slate dark theme); Sonner toasts, Framer Motion, Lucide icons; TipTap editor for templates.
+- **Canonical architecture + data model spec**: `docs/superpowers/specs/2026-03-28-saas-revamp-design.md`
+- **Work order**: `docs/ticket-order.md` (KAN-23 → KAN-24 → KAN-25 in backend track)
+
+### Backend conventions (follow these)
+- **Entry**: `backend/app/main.py` registers routers.
+- **DB**: async engine/session in `backend/app/database.py` (`get_session()` yields `AsyncSession`).
+- **Models**: `backend/app/models.py` (single file).
+- **Migrations**: `backend/alembic/versions/000x_*.py`; create Postgres ENUM types explicitly before tables.
+- **CRUD pattern**: Router defines Pydantic schemas → calls repository in `backend/app/repositories.py`.
+  - Example: `backend/app/routers/templates.py`
+- **Tests**: patch repositories + override dependencies; example `backend/tests/test_templates_router.py`.
+
+### Auth (important)
+- JWT is stored in an HTTP-only cookie `session_token` created in `backend/app/routers/auth.py`.
+- `backend/app/services/auth_service.py` provides `get_current_user()` from cookie.
+- Many routers depend on `backend/app/dependencies.py:get_current_user_id()` to get `user_id`.
+
+### Frontend conventions (follow these)
+- **Entry**: `frontend/src/main.jsx` mounts `<App />` from `frontend/src/App.jsx` inside `FeedbackProvider` + `BrowserRouter`. App shell lives in `frontend/src/components/AppShell.jsx`.
+- **HTTP client**: every backend call goes through `frontend/src/lib/apiClient.js` (`fetch` wrapper with `credentials: 'include'`, cold-start detection at 2.5s, `ApiError` with friendly messages). High-level helpers live in `frontend/src/lib/api.js`.
+- **Action lifecycle**: any user-initiated mutation must use the `useAction` hook in `frontend/src/lib/useAction.js`. It handles loading/success/error toasts via Sonner, returns `isPending` to disable the calling Button (which renders a `Loader2` spinner automatically), and supports `confetti: true` for major milestones.
+- **UI primitives**: shadcn components live in `frontend/src/components/ui/`. Compose with Tailwind tokens from `frontend/src/index.css` and `tailwind.config.js`. `cn()` from `@/lib/utils` merges classes.
+- **Env vars**: Vite-style `VITE_*` (e.g. `VITE_API_URL`, `VITE_TRACKING_PIXEL_URL`). Local dev reads them from `frontend/.env.local` (gitignored). Netlify dashboard mirrors the same names.
+- **Tests**: Vitest + React Testing Library, jsdom env. Mock `@/lib/api` and `sonner` (and `canvas-confetti` where used). Run with `npm test` (watch) or `npm run test:run` (CI).
+
+### Where to put durable docs
+- **Project memory (long-form)**: `docs/project-memory.md` (update as architecture evolves).
+

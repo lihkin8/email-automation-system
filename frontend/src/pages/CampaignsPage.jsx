@@ -1,57 +1,96 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Alert,
-  Box,
-  Button,
-  Card,
-  CardContent,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  FormControl,
-  IconButton,
-  InputLabel,
-  MenuItem,
-  Select,
-  TextField,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Tooltip,
-  Typography,
-} from "@mui/material";
-import DeleteIcon from "@mui/icons-material/Delete";
+  Eye,
+  MoreHorizontal,
+  Plus,
+  RefreshCcw,
+  Repeat2,
+  Send,
+  Trash2,
+} from "lucide-react";
+
 import {
   createCampaign,
   deleteCampaign,
   getCampaignMetrics,
-  getCampaignUnopened,
   getCampaignPreview,
+  getCampaignUnopened,
   listCampaigns,
   listContactLists,
   listTemplates,
+  runCampaignFollowUps,
   sendCampaign,
-} from "../services/api";
+} from "@/lib/api";
+import { useAction } from "@/lib/useAction";
+
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+const NONE_TEMPLATE = "__none__";
 
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState([]);
-  const [selectedCampaignId, setSelectedCampaignId] = useState("");
   const [templates, setTemplates] = useState([]);
   const [contactLists, setContactLists] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [fetchError, setFetchError] = useState(null);
+
+  const [previewCampaign, setPreviewCampaign] = useState(null);
   const [preview, setPreview] = useState(null);
   const [metrics, setMetrics] = useState(null);
   const [unopened, setUnopened] = useState([]);
-  const [sending, setSending] = useState(false);
-  const [creating, setCreating] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState(null);
+
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [deleting, setDeleting] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -61,408 +100,636 @@ export default function CampaignsPage() {
     follow_up_days: 5,
   });
 
+  const refreshCampaigns = async () => {
+    const data = await listCampaigns();
+    setCampaigns(data);
+    return data;
+  };
+
   useEffect(() => {
+    let cancelled = false;
     (async () => {
+      setLoading(true);
+      setFetchError(null);
       try {
-        setLoading(true);
         const [cs, ts, ls] = await Promise.all([
           listCampaigns(),
           listTemplates(),
           listContactLists(),
         ]);
+        if (cancelled) return;
         setCampaigns(cs);
         setTemplates(ts);
         setContactLists(ls);
-        setSelectedCampaignId(cs[0]?.id ?? "");
-      } catch (e) {
-        setError("Failed to load campaigns");
+      } catch (err) {
+        if (cancelled) return;
+        setFetchError(err.message ?? "Failed to load campaigns");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
-    if (!selectedCampaignId) {
+    if (!previewCampaign) {
       setPreview(null);
       setMetrics(null);
       setUnopened([]);
       return;
     }
+    let cancelled = false;
     (async () => {
+      setPreviewLoading(true);
+      setPreviewError(null);
       try {
-        setError(null);
         const [p, m, u] = await Promise.all([
-          getCampaignPreview(selectedCampaignId),
-          getCampaignMetrics(selectedCampaignId),
-          getCampaignUnopened(selectedCampaignId),
+          getCampaignPreview(previewCampaign.id),
+          getCampaignMetrics(previewCampaign.id),
+          getCampaignUnopened(previewCampaign.id),
         ]);
+        if (cancelled) return;
         setPreview(p);
         setMetrics(m);
         setUnopened(u);
-      } catch (e) {
-        setPreview(null);
-        setMetrics(null);
-        setUnopened([]);
-        setError("Failed to load preview");
+      } catch (err) {
+        if (cancelled) return;
+        setPreviewError(err.message ?? "Couldn't load preview");
+      } finally {
+        if (!cancelled) setPreviewLoading(false);
       }
     })();
-  }, [selectedCampaignId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [previewCampaign]);
 
-  const resolvedVars = useMemo(() => {
-    return preview?.resolved_variables ? Object.entries(preview.resolved_variables) : [];
-  }, [preview]);
-
-  const handleSend = async () => {
-    if (!selectedCampaignId) return;
-    try {
-      setSending(true);
-      await sendCampaign(selectedCampaignId, 2.0);
-      const [m, u] = await Promise.all([
-        getCampaignMetrics(selectedCampaignId),
-        getCampaignUnopened(selectedCampaignId),
-      ]);
-      setMetrics(m);
-      setUnopened(u);
-    } catch {
-      setError("Failed to send campaign");
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!deleteTarget) return;
-    setDeleting(true);
-    setError(null);
-    try {
-      await deleteCampaign(deleteTarget.id);
-      const cs = await listCampaigns();
-      setCampaigns(cs);
-      if (deleteTarget.id === selectedCampaignId) {
-        setSelectedCampaignId(cs[0]?.id ?? "");
-      }
-      setDeleteTarget(null);
-    } catch {
-      setError("Failed to delete campaign");
-      setDeleteTarget(null);
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  const handleCreate = async () => {
-    try {
-      setCreating(true);
-      setError(null);
+  const { run: doCreate, isPending: creating } = useAction(
+    () => {
       const payload = {
         name: form.name,
         template_id: Number(form.template_id),
         contact_list_id: Number(form.contact_list_id),
-        follow_up_template_id: form.follow_up_template_id ? Number(form.follow_up_template_id) : null,
+        follow_up_template_id:
+          form.follow_up_template_id && form.follow_up_template_id !== NONE_TEMPLATE
+            ? Number(form.follow_up_template_id)
+            : null,
         follow_up_days: Number(form.follow_up_days),
       };
-      const created = await createCampaign(payload);
-      const cs = await listCampaigns();
-      setCampaigns(cs);
-      setSelectedCampaignId(created.id);
-      setForm((f) => ({ ...f, name: "" }));
-    } catch {
-      setError("Failed to create campaign");
-    } finally {
-      setCreating(false);
+      return createCampaign(payload);
+    },
+    {
+      loading: "Creating campaign...",
+      success: (c) => `Campaign "${c.name}" created`,
+      onSuccess: async () => {
+        await refreshCampaigns();
+        setForm((f) => ({ ...f, name: "" }));
+      },
     }
-  };
+  );
 
-  if (loading) {
-    return (
-      <Box sx={{ display: "flex", justifyContent: "center", mt: 8 }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
+  const { run: doSend, isPending: sending } = useAction(
+    (id) => sendCampaign(id, 2.0),
+    {
+      loading: "Sending campaign...",
+      success: (data) =>
+        `Campaign sent — ${data.sent} succeeded${
+          data.failed ? `, ${data.failed} failed` : ""
+        }`,
+      confetti: true,
+      onSuccess: async () => {
+        if (!previewCampaign) return;
+        try {
+          const [m, u] = await Promise.all([
+            getCampaignMetrics(previewCampaign.id),
+            getCampaignUnopened(previewCampaign.id),
+          ]);
+          setMetrics(m);
+          setUnopened(u);
+        } catch {
+          /* surface via next render only */
+        }
+      },
+    }
+  );
+
+  const { run: doFollowUps, isPending: followingUp } = useAction(
+    (id) => runCampaignFollowUps(id, 2.0),
+    {
+      loading: "Sending follow-ups...",
+      success: (data) =>
+        `Follow-ups sent — ${data.sent ?? 0} succeeded${
+          data.failed ? `, ${data.failed} failed` : ""
+        }`,
+    }
+  );
+
+  const { run: doDelete, isPending: deleting } = useAction(
+    () => deleteCampaign(deleteTarget.id),
+    {
+      loading: "Deleting campaign...",
+      success: "Campaign deleted",
+      onSuccess: async () => {
+        const cs = await refreshCampaigns();
+        if (previewCampaign?.id === deleteTarget.id) {
+          setPreviewCampaign(null);
+        }
+        setDeleteTarget(null);
+        return cs;
+      },
+    }
+  );
+
+  const resolvedVars = useMemo(
+    () =>
+      preview?.resolved_variables
+        ? Object.entries(preview.resolved_variables)
+        : [],
+    [preview]
+  );
 
   return (
-    <Box p={4}>
-      <Typography variant="h5" sx={{ fontWeight: 700, mb: 2 }}>
-        Campaigns
-      </Typography>
+    <div className="space-y-6">
+      <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Campaigns</h1>
+          <p className="text-sm text-muted-foreground">
+            Pair a template with a contact list and send.
+          </p>
+        </div>
+      </header>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
+      {fetchError ? (
+        <Alert variant="destructive">
+          <AlertTitle>Couldn't load campaigns</AlertTitle>
+          <AlertDescription>{fetchError}</AlertDescription>
         </Alert>
-      )}
+      ) : null}
 
-      <Card sx={{ mb: 3 }}>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Create campaign</CardTitle>
+          <CardDescription>
+            We'll combine the template, list, and (optional) follow-up into a
+            single campaign you can send.
+          </CardDescription>
+        </CardHeader>
         <CardContent>
-          <Typography variant="h6" sx={{ mb: 2 }}>
-            Create campaign
-          </Typography>
-          <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
-            <TextField
-              label="Name"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              fullWidth
-            />
-            <FormControl fullWidth>
-              <InputLabel id="template-select-label">Template</InputLabel>
+          <div className="grid gap-4 md:grid-cols-2">
+            <FormField label="Name">
+              <Input
+                value={form.name}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, name: e.target.value }))
+                }
+                placeholder="e.g. Spring SWE outreach"
+              />
+            </FormField>
+            <FormField label="Template">
               <Select
-                labelId="template-select-label"
-                value={form.template_id}
-                label="Template"
-                onChange={(e) => setForm((f) => ({ ...f, template_id: e.target.value }))}
+                value={form.template_id ? String(form.template_id) : ""}
+                onValueChange={(v) =>
+                  setForm((f) => ({ ...f, template_id: v }))
+                }
               >
-                {templates.map((t) => (
-                  <MenuItem key={t.id} value={t.id}>
-                    {t.name}
-                  </MenuItem>
-                ))}
+                <SelectTrigger>
+                  <SelectValue placeholder="Pick a template" />
+                </SelectTrigger>
+                <SelectContent>
+                  {templates.map((t) => (
+                    <SelectItem key={t.id} value={String(t.id)}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
-            </FormControl>
-            <FormControl fullWidth>
-              <InputLabel id="list-select-label">Contact list</InputLabel>
+            </FormField>
+            <FormField label="Contact list">
               <Select
-                labelId="list-select-label"
-                value={form.contact_list_id}
-                label="Contact list"
-                onChange={(e) => setForm((f) => ({ ...f, contact_list_id: e.target.value }))}
+                value={form.contact_list_id ? String(form.contact_list_id) : ""}
+                onValueChange={(v) =>
+                  setForm((f) => ({ ...f, contact_list_id: v }))
+                }
               >
-                {contactLists.map((l) => (
-                  <MenuItem key={l.id} value={l.id}>
-                    {l.name}
-                  </MenuItem>
-                ))}
+                <SelectTrigger>
+                  <SelectValue placeholder="Pick a list" />
+                </SelectTrigger>
+                <SelectContent>
+                  {contactLists.map((l) => (
+                    <SelectItem key={l.id} value={String(l.id)}>
+                      {l.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
-            </FormControl>
-            <FormControl fullWidth>
-              <InputLabel id="fu-template-select-label">Follow-up template (optional)</InputLabel>
+            </FormField>
+            <FormField label="Follow-up template (optional)">
               <Select
-                labelId="fu-template-select-label"
-                value={form.follow_up_template_id}
-                label="Follow-up template (optional)"
-                onChange={(e) => setForm((f) => ({ ...f, follow_up_template_id: e.target.value }))}
+                value={
+                  form.follow_up_template_id
+                    ? String(form.follow_up_template_id)
+                    : NONE_TEMPLATE
+                }
+                onValueChange={(v) =>
+                  setForm((f) => ({
+                    ...f,
+                    follow_up_template_id: v === NONE_TEMPLATE ? "" : v,
+                  }))
+                }
               >
-                <MenuItem value="">
-                  <em>None</em>
-                </MenuItem>
-                {templates.map((t) => (
-                  <MenuItem key={t.id} value={t.id}>
-                    {t.name}
-                  </MenuItem>
-                ))}
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE_TEMPLATE}>None</SelectItem>
+                  {templates.map((t) => (
+                    <SelectItem key={t.id} value={String(t.id)}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
-            </FormControl>
-            <TextField
-              label="Follow-up days"
-              type="number"
-              value={form.follow_up_days}
-              onChange={(e) => setForm((f) => ({ ...f, follow_up_days: e.target.value }))}
-              fullWidth
-            />
-            <Box sx={{ display: "flex", alignItems: "center" }}>
+            </FormField>
+            <FormField label="Follow-up after (days)">
+              <Input
+                type="number"
+                min={1}
+                max={30}
+                value={form.follow_up_days}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, follow_up_days: e.target.value }))
+                }
+              />
+            </FormField>
+            <div className="flex items-end">
               <Button
-                variant="contained"
-                onClick={handleCreate}
+                onClick={() => doCreate()}
+                loading={creating}
                 disabled={
                   creating ||
-                  !form.name ||
+                  !form.name.trim() ||
                   !form.template_id ||
                   !form.contact_list_id
                 }
               >
-                {creating ? "Creating..." : "Create"}
+                <Plus />
+                Create campaign
               </Button>
-            </Box>
-          </Box>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
-      <Box sx={{ display: "flex", gap: 2, alignItems: "center", mb: 3 }}>
-        <FormControl sx={{ minWidth: 260 }}>
-          <InputLabel id="campaign-select-label">Campaign</InputLabel>
-          <Select
-            labelId="campaign-select-label"
-            value={selectedCampaignId}
-            label="Campaign"
-            onChange={(e) => setSelectedCampaignId(e.target.value)}
-          >
-            {campaigns.map((c) => (
-              <MenuItem key={c.id} value={c.id}>
-                {c.name}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+      <section>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-base font-semibold">Your campaigns</h2>
+        </div>
+        {loading ? (
+          <Skeleton className="h-48 w-full rounded-lg" />
+        ) : campaigns.length === 0 ? (
+          <Card>
+            <CardContent className="py-10 text-center text-sm text-muted-foreground">
+              No campaigns yet. Create your first above.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="overflow-hidden rounded-lg border border-border bg-card">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Template</TableHead>
+                  <TableHead>Contact list</TableHead>
+                  <TableHead>Follow-up</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="w-12 text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {campaigns.map((c) => {
+                  const template = templates.find((t) => t.id === c.template_id);
+                  const list = contactLists.find(
+                    (l) => l.id === c.contact_list_id
+                  );
+                  const followTemplate = templates.find(
+                    (t) => t.id === c.follow_up_template_id
+                  );
+                  return (
+                    <TableRow key={c.id}>
+                      <TableCell className="font-medium text-foreground">
+                        {c.name}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {template?.name ?? `#${c.template_id}`}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {list?.name ?? `#${c.contact_list_id}`}
+                      </TableCell>
+                      <TableCell>
+                        {followTemplate ? (
+                          <Badge variant="outline">
+                            {followTemplate.name} · {c.follow_up_days}d
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            None
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {c.created_at
+                          ? new Date(c.created_at).toLocaleDateString()
+                          : "—"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setPreviewCampaign(c)}
+                          >
+                            <Eye />
+                            Preview
+                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onSelect={(e) => {
+                                  e.preventDefault();
+                                  doSend(c.id);
+                                }}
+                              >
+                                <Send />
+                                Send campaign
+                              </DropdownMenuItem>
+                              {c.follow_up_template_id ? (
+                                <DropdownMenuItem
+                                  onSelect={(e) => {
+                                    e.preventDefault();
+                                    doFollowUps(c.id);
+                                  }}
+                                >
+                                  <Repeat2 />
+                                  Run follow-ups
+                                </DropdownMenuItem>
+                              ) : null}
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onSelect={(e) => {
+                                  e.preventDefault();
+                                  setDeleteTarget(c);
+                                }}
+                                data-testid="delete-campaign-btn"
+                              >
+                                <Trash2 />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </section>
 
-        <Button
-          variant="contained"
-          disabled={!selectedCampaignId || sending}
-          onClick={handleSend}
+      <Sheet
+        open={Boolean(previewCampaign)}
+        onOpenChange={(o) => !o && setPreviewCampaign(null)}
+      >
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl"
         >
-          {sending ? "Sending..." : "Send campaign"}
-        </Button>
+          <SheetHeader className="border-b border-border px-6 py-4">
+            <SheetTitle>{previewCampaign?.name ?? "Campaign"}</SheetTitle>
+            <SheetDescription>
+              Live preview rendered against a sample contact.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
+            {previewError ? (
+              <Alert variant="destructive">
+                <AlertDescription>{previewError}</AlertDescription>
+              </Alert>
+            ) : null}
 
-        <Tooltip title="Delete campaign">
-          <span>
-            <IconButton
-              color="error"
-              disabled={!selectedCampaignId}
-              onClick={() => {
-                const c = campaigns.find((x) => x.id === selectedCampaignId);
-                if (c) setDeleteTarget(c);
-              }}
-              aria-label="delete-campaign"
-              data-testid="delete-campaign-btn"
+            {previewLoading ? (
+              <div className="space-y-3">
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-48 w-full" />
+              </div>
+            ) : preview ? (
+              <>
+                {metrics ? (
+                  <Card>
+                    <CardContent className="grid grid-cols-3 gap-3 p-4 text-sm">
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                          Sent (main)
+                        </p>
+                        <p className="text-lg font-semibold">{metrics.sent_main_count}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                          Opened
+                        </p>
+                        <p className="text-lg font-semibold">{metrics.opened_main_count}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                          Open rate
+                        </p>
+                        <p className="text-lg font-semibold">
+                          {(metrics.open_rate_pct ?? 0).toFixed(1)}%
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : null}
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Sample recipient</CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-sm text-muted-foreground">
+                    {preview.sample_contact?.name} ·{" "}
+                    {preview.sample_contact?.email} ·{" "}
+                    {preview.sample_contact?.company}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Subject</CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-sm">
+                    {preview.subject_rendered}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Email body</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div
+                      className="rounded-md border border-border bg-white p-4 text-zinc-900"
+                      dangerouslySetInnerHTML={{
+                        __html: preview.body_html_rendered,
+                      }}
+                    />
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Resolved variables</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {resolvedVars.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">None</p>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Variable</TableHead>
+                            <TableHead>Value</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {resolvedVars.map(([k, v]) => (
+                            <TableRow key={k}>
+                              <TableCell className="font-mono text-xs">
+                                {k}
+                              </TableCell>
+                              <TableCell>{String(v)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Unopened contacts</CardTitle>
+                    <CardDescription>
+                      Recipients we still haven't seen open the main email.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {unopened.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">None</p>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Email</TableHead>
+                            <TableHead>Company</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {unopened.map((u) => (
+                            <TableRow key={u.email_id}>
+                              <TableCell>{u.recruiter_name}</TableCell>
+                              <TableCell>{u.recruiter_email}</TableCell>
+                              <TableCell>{u.company}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">No preview yet.</p>
+            )}
+          </div>
+          <SheetFooter className="border-t border-border px-6 py-4">
+            <Button
+              variant="outline"
+              onClick={() => setPreviewCampaign(null)}
             >
-              <DeleteIcon />
-            </IconButton>
-          </span>
-        </Tooltip>
-      </Box>
+              Close
+            </Button>
+            {previewCampaign?.follow_up_template_id ? (
+              <Button
+                variant="outline"
+                onClick={() => doFollowUps(previewCampaign.id)}
+                loading={followingUp}
+              >
+                <Repeat2 />
+                Run follow-ups
+              </Button>
+            ) : null}
+            <Button
+              onClick={() => doSend(previewCampaign.id)}
+              loading={sending}
+              disabled={!previewCampaign || sending}
+            >
+              <Send />
+              Send campaign
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
-      {!preview ? (
-        <Typography color="text.secondary">
-          Select a campaign to preview.
-        </Typography>
-      ) : (
-        <Box sx={{ display: "grid", gridTemplateColumns: "1fr", gap: 2 }}>
-          {!!metrics && (
-            <Card>
-              <CardContent>
-                <Typography variant="h6" sx={{ mb: 1 }}>
-                  Metrics
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Sent (main): {metrics.sent_main_count} · Opened (main):{" "}
-                  {metrics.opened_main_count} · Open rate:{" "}
-                  {Number(metrics.open_rate_pct || 0).toFixed(1)}%
-                </Typography>
-              </CardContent>
-            </Card>
-          )}
-
-          <Card>
-            <CardContent>
-              <Typography variant="h6" sx={{ mb: 1 }}>
-                Sample contact
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {preview.sample_contact?.name} · {preview.sample_contact?.email} ·{" "}
-                {preview.sample_contact?.company}
-              </Typography>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent>
-              <Typography variant="h6" sx={{ mb: 1 }}>
-                Subject
-              </Typography>
-              <Typography variant="body1">{preview.subject_rendered}</Typography>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent>
-              <Typography variant="h6" sx={{ mb: 1 }}>
-                Preview
-              </Typography>
-              <Box
-                sx={{
-                  border: "1px solid rgba(0,0,0,0.12)",
-                  borderRadius: 1,
-                  p: 2,
-                }}
-                dangerouslySetInnerHTML={{ __html: preview.body_html_rendered }}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent>
-              <Typography variant="h6" sx={{ mb: 1 }}>
-                Resolved variables
-              </Typography>
-              {resolvedVars.length === 0 ? (
-                <Typography color="text.secondary">None</Typography>
-              ) : (
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Variable</TableCell>
-                      <TableCell>Value</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {resolvedVars.map(([k, v]) => (
-                      <TableRow key={k}>
-                        <TableCell>{k}</TableCell>
-                        <TableCell>{String(v)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent>
-              <Typography variant="h6" sx={{ mb: 1 }}>
-                Unopened contacts
-              </Typography>
-              {unopened.length === 0 ? (
-                <Typography color="text.secondary">None</Typography>
-              ) : (
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Name</TableCell>
-                      <TableCell>Email</TableCell>
-                      <TableCell>Company</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {unopened.map((u) => (
-                      <TableRow key={u.email_id}>
-                        <TableCell>{u.recruiter_name}</TableCell>
-                        <TableCell>{u.recruiter_email}</TableCell>
-                        <TableCell>{u.company}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </Box>
-      )}
-
-      <Dialog open={Boolean(deleteTarget)} onClose={() => !deleting && setDeleteTarget(null)}>
-        <DialogTitle>Delete Campaign?</DialogTitle>
+      <Dialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(o) => !o && !deleting && setDeleteTarget(null)}
+      >
         <DialogContent>
-          <DialogContentText>
-            Are you sure you want to delete "<strong>{deleteTarget?.name}</strong>"?
-            This will not delete the template or contact list. This cannot be undone.
-          </DialogContentText>
+          <DialogHeader>
+            <DialogTitle>Delete campaign?</DialogTitle>
+            <DialogDescription>
+              "<strong>{deleteTarget?.name}</strong>" will be removed. The
+              template and contact list will not be touched.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteTarget(null)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => doDelete()}
+              loading={deleting}
+              data-testid="confirm-delete-campaign-btn"
+            >
+              Delete campaign
+            </Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteTarget(null)} disabled={deleting}>
-            Cancel
-          </Button>
-          <Button
-            color="error"
-            variant="contained"
-            onClick={handleDeleteConfirm}
-            disabled={deleting}
-            data-testid="confirm-delete-campaign-btn"
-          >
-            {deleting ? "Deleting..." : "Delete"}
-          </Button>
-        </DialogActions>
       </Dialog>
-    </Box>
+    </div>
+  );
+}
+
+function FormField({ label, children }) {
+  const id = React.useId();
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>{label}</Label>
+      <div id={id}>{children}</div>
+    </div>
   );
 }

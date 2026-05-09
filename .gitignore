@@ -3,3 +3,7 @@ CLAUDE.md
 backend/.env
 .worktrees
 tasks.md
+
+.DS_Store
+.serena/
+/package-lock.json

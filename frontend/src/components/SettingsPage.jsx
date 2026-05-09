@@ -1,223 +1,327 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
-  Alert,
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Chip,
-  CircularProgress,
-  LinearProgress,
-  Snackbar,
-  TextField,
-  Typography,
-} from "@mui/material";
+  CheckCircle2,
+  ExternalLink,
+  FileText,
+  Mail,
+  RefreshCcw,
+  Trash2,
+  Upload,
+  XCircle,
+} from "lucide-react";
+
 import {
+  deleteResume,
   fetchSettings,
   updateSettings,
   uploadResume,
-  deleteResume,
-} from "../services/api";
+} from "@/lib/api";
+import { useAction } from "@/lib/useAction";
+
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+
+const API_URL = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(null);
   const [followUpDays, setFollowUpDays] = useState(3);
-  const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
-  const resumeInputId = React.useId();
+  const [pendingResumeName, setPendingResumeName] = useState(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
+    let cancelled = false;
     fetchSettings()
       .then((data) => {
+        if (cancelled) return;
         setSettings(data);
         setFollowUpDays(data.follow_up_days);
       })
-      .catch(() => setFetchError("Failed to load settings. Please refresh."))
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        if (cancelled) return;
+        setFetchError(err.message ?? "Failed to load settings.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const showSnackbar = (message, severity = "success") =>
-    setSnackbar({ open: true, message, severity });
-
-  const handleSavePreferences = async () => {
-    if (followUpDays < 1 || followUpDays > 30) {
-      showSnackbar("Follow-up days must be between 1 and 30", "error");
-      return;
+  const { run: doSavePrefs, isPending: saving } = useAction(
+    () => updateSettings({ follow_up_days: followUpDays }),
+    {
+      loading: "Saving preferences...",
+      success: "Preferences saved",
     }
-    setSaving(true);
-    try {
-      await updateSettings({ follow_up_days: followUpDays });
-      showSnackbar("Preferences saved");
-    } catch {
-      showSnackbar("Failed to save preferences", "error");
-    } finally {
-      setSaving(false);
-    }
-  };
+  );
 
-  const handleUploadResume = async (e) => {
-    const file = e.target.files[0];
+  const { run: doUploadResume, isPending: uploading } = useAction(
+    (file) => uploadResume(file, setUploadProgress),
+    {
+      loading: "Uploading resume...",
+      success: "Resume uploaded",
+      onSuccess: (data) => {
+        setSettings((s) => ({
+          ...s,
+          resume_url: data.resume_url,
+          resume_filename: pendingResumeName ?? s?.resume_filename,
+        }));
+        setUploadProgress(0);
+        setPendingResumeName(null);
+      },
+      onError: () => {
+        setUploadProgress(0);
+        setPendingResumeName(null);
+      },
+    }
+  );
+
+  const { run: doDeleteResume, isPending: removingResume } = useAction(
+    () => deleteResume(),
+    {
+      loading: "Removing resume...",
+      success: "Resume removed",
+      onSuccess: () =>
+        setSettings((s) => ({ ...s, resume_url: null, resume_filename: null })),
+    }
+  );
+
+  const handleResumeFile = async (file) => {
     if (!file) return;
-    setUploading(true);
-    setUploadProgress(0);
+    setPendingResumeName(file.name);
     try {
-      const data = await uploadResume(file, (pct) => setUploadProgress(pct));
-      setSettings((s) => ({ ...s, resume_url: data.resume_url, resume_filename: file.name }));
-      showSnackbar("Resume uploaded");
+      await doUploadResume(file);
     } catch {
-      showSnackbar("Failed to upload resume", "error");
-    } finally {
-      setUploading(false);
-      setUploadProgress(0);
-      e.target.value = "";
-    }
-  };
-
-  const handleDeleteResume = async () => {
-    try {
-      await deleteResume();
-      setSettings((s) => ({ ...s, resume_url: null, resume_filename: null }));
-      showSnackbar("Resume removed");
-    } catch {
-      showSnackbar("Failed to remove resume", "error");
+      /* useAction toasts the error */
     }
   };
 
   if (loading) {
     return (
-      <Box sx={{ display: "flex", justifyContent: "center", mt: 8 }}>
-        <CircularProgress />
-      </Box>
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-64 w-full rounded-lg" />
+      </div>
     );
   }
 
   if (fetchError) {
     return (
-      <Alert severity="error" sx={{ mt: 4 }}>
-        {fetchError}
+      <Alert variant="destructive">
+        <AlertTitle>Couldn't load settings</AlertTitle>
+        <AlertDescription>{fetchError}</AlertDescription>
       </Alert>
     );
   }
 
+  const followUpInvalid = followUpDays < 1 || followUpDays > 30;
+
   return (
-    <Box sx={{ maxWidth: 600, mx: "auto" }}>
-      <Typography variant="h5" sx={{ mb: 3, fontWeight: 700 }}>
-        Settings
-      </Typography>
+    <div className="space-y-6">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+        <p className="text-sm text-muted-foreground">
+          Connection status, sending preferences, and the resume we attach to
+          campaigns.
+        </p>
+      </header>
 
-      {/* Gmail */}
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Typography variant="h6" sx={{ mb: 2 }}>
-            Gmail
-          </Typography>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <Chip
-              label={settings.gmail_connected ? "Connected" : "Not Connected"}
-              color={settings.gmail_connected ? "success" : "error"}
-              size="small"
-            />
-            <Button
-              variant="outlined"
-              size="small"
-              onClick={() => {
-                window.location.href = `${process.env.REACT_APP_API_URL}/auth/login`;
-              }}
-            >
-              Reconnect Gmail
-            </Button>
-          </Box>
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="preferences">
+        <TabsList>
+          <TabsTrigger value="preferences">Preferences</TabsTrigger>
+          <TabsTrigger value="resume">Resume</TabsTrigger>
+          <TabsTrigger value="account">Account</TabsTrigger>
+        </TabsList>
 
-      {/* Email Preferences */}
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Typography variant="h6" sx={{ mb: 2 }}>
-            Email Preferences
-          </Typography>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <TextField
-              label="Follow-up after N days"
-              type="number"
-              size="small"
-              value={followUpDays}
-              onChange={(e) => setFollowUpDays(Number(e.target.value))}
-              inputProps={{ min: 1, max: 30 }}
-              sx={{ width: 220 }}
-            />
-            <Button
-              variant="contained"
-              size="small"
-              onClick={handleSavePreferences}
-              disabled={saving}
-            >
-              {saving ? "Saving…" : "Save"}
-            </Button>
-          </Box>
-        </CardContent>
-      </Card>
-
-      {/* Resume */}
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Typography variant="h6" sx={{ mb: 2 }}>
-            Resume
-          </Typography>
-          {settings.resume_url ? (
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <Typography
-                component="a"
-                href={settings.resume_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                sx={{ color: "primary.main" }}
+        <TabsContent value="preferences">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Email preferences</CardTitle>
+              <CardDescription>
+                How long to wait before automatic follow-ups for unopened emails.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-2 sm:max-w-xs">
+                <Label htmlFor="follow-up-days">Follow-up after (days)</Label>
+                <Input
+                  id="follow-up-days"
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={followUpDays}
+                  onChange={(e) => setFollowUpDays(Number(e.target.value))}
+                />
+                {followUpInvalid ? (
+                  <p className="text-xs text-destructive">
+                    Must be between 1 and 30 days.
+                  </p>
+                ) : null}
+              </div>
+              <Button
+                onClick={() => doSavePrefs()}
+                loading={saving}
+                disabled={saving || followUpInvalid}
               >
-                {settings.resume_filename}
-              </Typography>
-              <Button variant="outlined" color="error" size="small" onClick={handleDeleteResume}>
-                Remove
+                Save preferences
               </Button>
-            </Box>
-          ) : (
-            <Box>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="resume">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Resume</CardTitle>
+              <CardDescription>
+                Attached to outgoing campaign emails. PDF or Word docs.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {settings?.resume_url ? (
+                <div className="flex items-center gap-3 rounded-md border border-border bg-card p-3">
+                  <span className="grid h-9 w-9 place-items-center rounded-md bg-secondary text-muted-foreground">
+                    <FileText className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <a
+                      href={settings.resume_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block truncate text-sm font-medium text-foreground hover:underline"
+                    >
+                      {settings.resume_filename ?? "resume"}
+                    </a>
+                    <p className="text-xs text-muted-foreground">
+                      Linked to all outgoing campaign emails.
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => doDeleteResume()}
+                    loading={removingResume}
+                    disabled={removingResume}
+                  >
+                    <Trash2 />
+                    Remove
+                  </Button>
+                </div>
+              ) : (
+                <div className="rounded-md border border-dashed border-border p-6 text-center">
+                  <span className="grid h-10 w-10 place-items-center rounded-full bg-secondary text-muted-foreground mx-auto">
+                    <Upload className="h-5 w-5" />
+                  </span>
+                  <p className="mt-3 text-sm font-medium">No resume uploaded</p>
+                  <p className="text-xs text-muted-foreground">
+                    PDF, DOC, or DOCX up to a few MB.
+                  </p>
+                  <Button
+                    className="mt-3"
+                    onClick={() => fileInputRef.current?.click()}
+                    loading={uploading}
+                    disabled={uploading}
+                  >
+                    Upload resume
+                  </Button>
+                  {uploading ? (
+                    <Progress value={uploadProgress} className="mx-auto mt-3 max-w-xs" />
+                  ) : null}
+                </div>
+              )}
               <input
-                id={resumeInputId}
+                ref={fileInputRef}
                 type="file"
                 accept=".pdf,.doc,.docx"
-                style={{ display: "none" }}
-                onChange={handleUploadResume}
+                className="hidden"
+                onChange={(e) => {
+                  handleResumeFile(e.target.files?.[0]);
+                  e.target.value = "";
+                }}
               />
-              <label htmlFor={resumeInputId}>
-                <Button variant="outlined" component="span" disabled={uploading}>
-                  {uploading ? "Uploading…" : "Upload Resume"}
-                </Button>
-              </label>
-              {uploading && (
-                <LinearProgress
-                  variant="determinate"
-                  value={uploadProgress}
-                  sx={{ mt: 1, maxWidth: 220 }}
-                />
-              )}
-            </Box>
-          )}
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={3000}
-        onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
-      >
-        <Alert severity={snackbar.severity} sx={{ width: "100%" }}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
-    </Box>
+        <TabsContent value="account">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Gmail connection</CardTitle>
+              <CardDescription>
+                We send campaign emails through your Gmail account.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-col gap-2 rounded-md border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="grid h-9 w-9 place-items-center rounded-md bg-secondary text-muted-foreground">
+                    <Mail className="h-4 w-4" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-medium">Gmail</p>
+                    <p className="text-xs text-muted-foreground">
+                      OAuth-based. Reconnect if scopes change.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {settings?.gmail_connected ? (
+                    <Badge variant="success" className="gap-1">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Connected
+                    </Badge>
+                  ) : (
+                    <Badge variant="destructive" className="gap-1">
+                      <XCircle className="h-3 w-3" />
+                      Not connected
+                    </Badge>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      window.location.href = `${API_URL}/auth/login`;
+                    }}
+                  >
+                    <RefreshCcw />
+                    Reconnect
+                  </Button>
+                </div>
+              </div>
+              <a
+                href={`${API_URL}/auth/login`}
+                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              >
+                Open OAuth consent
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }

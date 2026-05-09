@@ -1,16 +1,18 @@
 import React from "react";
+import { describe, test, expect, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+
 import OnboardingPage from "./OnboardingPage";
 
-jest.mock("../services/api", () => ({
-  fetchOnboardingStatus: jest.fn(),
+vi.mock("@/lib/api", () => ({
+  fetchOnboardingStatus: vi.fn(),
 }));
 
-import { fetchOnboardingStatus } from "../services/api";
+import { fetchOnboardingStatus } from "@/lib/api";
 
 describe("OnboardingPage", () => {
-  test("renders stepper and CTA", async () => {
+  test("renders steps and CTAs once status loads", async () => {
     fetchOnboardingStatus.mockResolvedValue({
       gmail_connected: false,
       has_resume: false,
@@ -29,8 +31,7 @@ describe("OnboardingPage", () => {
       expect(screen.getByText("Onboarding")).toBeInTheDocument();
     });
 
-    expect(screen.getAllByText("Connect Gmail").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Connect Gmail/).length).toBeGreaterThan(0);
     expect(screen.getByText("Refresh status")).toBeInTheDocument();
   });
 });
-

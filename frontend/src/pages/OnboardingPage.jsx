@@ -1,153 +1,204 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
-  Alert,
-  Box,
-  Button,
+  ArrowRight,
+  Circle,
+  CircleCheck,
+  Mail,
+  RefreshCcw,
+  Send,
+  Sparkles,
+  UploadCloud,
+  Users,
+} from "lucide-react";
+
+import { fetchOnboardingStatus } from "@/lib/api";
+import { cn } from "@/lib/utils";
+
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
   Card,
   CardContent,
-  CircularProgress,
-  Step,
-  StepLabel,
-  Stepper,
-  Typography,
-} from "@mui/material";
-import { Link } from "react-router-dom";
-import { fetchOnboardingStatus } from "../services/api";
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
+
+const API_URL = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 
 export default function OnboardingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [status, setStatus] = useState(null);
 
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const s = await fetchOnboardingStatus();
+      setStatus(s);
+    } catch (err) {
+      setError(err.message ?? "Failed to load onboarding status");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const s = await fetchOnboardingStatus();
-        setStatus(s);
-      } catch {
-        setError("Failed to load onboarding status");
-      } finally {
-        setLoading(false);
-      }
-    })();
+    load();
   }, []);
 
   const steps = [
     {
       key: "gmail",
       label: "Connect Gmail",
-      done: !!status?.gmail_connected,
       description:
-        "Connect your Gmail so we can send campaign emails from your account.",
-      cta: {
-        label: "Connect Gmail",
-        href: `${(process.env.REACT_APP_API_URL || "").replace(/\/$/, "")}/auth/login`,
-      },
+        "Connect your Google account so we can send campaign emails from your address.",
+      done: !!status?.gmail_connected,
+      icon: Mail,
+      cta: { label: "Connect Gmail", href: `${API_URL}/auth/login` },
     },
     {
       key: "resume",
-      label: "Upload resume",
-      done: !!status?.has_resume,
+      label: "Upload your resume",
       description:
-        "Upload your resume once — we’ll attach it to outgoing campaign emails.",
-      cta: { label: "Go to Settings", to: "/settings" },
+        "Upload your resume once. We'll attach it to every outgoing campaign email.",
+      done: !!status?.has_resume,
+      icon: UploadCloud,
+      cta: { label: "Open Settings", to: "/settings" },
     },
     {
       key: "template",
       label: "Create a template",
-      done: !!status?.has_template,
       description:
-        "Create a MAIN template (and optionally a FOLLOW_UP template) for your campaign.",
-      cta: { label: "Go to Templates", to: "/templates" },
+        "Build a MAIN template (and an optional FOLLOW_UP) with merge variables.",
+      done: !!status?.has_template,
+      icon: Sparkles,
+      cta: { label: "Open Templates", to: "/templates" },
     },
     {
       key: "contacts",
       label: "Import contacts",
-      done: !!status?.has_contacts,
       description:
-        "Upload a contact list so we know who to email in your campaign.",
-      cta: { label: "Go to Contacts", to: "/contacts" },
+        "Upload at least one contact list — that's who your campaign will email.",
+      done: !!status?.has_contacts,
+      icon: Users,
+      cta: { label: "Open Contacts", to: "/contacts" },
     },
     {
       key: "campaign",
-      label: "Create & send a campaign",
-      done: !!status?.has_campaign,
+      label: "Send your first campaign",
       description:
-        "Create a campaign, preview the rendered email, then send it.",
-      cta: { label: "Go to Campaigns", to: "/campaigns" },
+        "Combine a template with a list, preview the rendered email, and hit send.",
+      done: !!status?.has_campaign,
+      icon: Send,
+      cta: { label: "Open Campaigns", to: "/campaigns" },
     },
   ];
 
-  const activeStep = Math.max(
-    0,
-    steps.findIndex((s) => !s.done)
-  );
-
-  if (loading) {
-    return (
-      <Box sx={{ display: "flex", justifyContent: "center", mt: 8 }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
+  const completed = steps.filter((s) => s.done).length;
+  const progressPct = Math.round((completed / steps.length) * 100);
 
   return (
-    <Box p={4}>
-      <Typography variant="h5" sx={{ fontWeight: 700, mb: 2 }}>
-        Onboarding
-      </Typography>
+    <div className="space-y-6">
+      <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Onboarding</h1>
+          <p className="text-sm text-muted-foreground">
+            Five quick steps to send your first campaign.
+          </p>
+        </div>
+        <Button variant="outline" onClick={load} disabled={loading}>
+          <RefreshCcw />
+          Refresh status
+        </Button>
+      </header>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
+      {error ? (
+        <Alert variant="destructive">
+          <AlertTitle>Couldn't load status</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
         </Alert>
-      )}
-
-      <Stepper activeStep={activeStep} alternativeLabel sx={{ mb: 3 }}>
-        {steps.map((s) => (
-          <Step key={s.key} completed={s.done}>
-            <StepLabel>{s.label}</StepLabel>
-          </Step>
-        ))}
-      </Stepper>
+      ) : null}
 
       <Card>
-        <CardContent>
-          <Typography variant="h6" sx={{ mb: 1 }}>
-            {steps[activeStep]?.label ?? "All set"}
-          </Typography>
-          <Typography color="text.secondary" sx={{ mb: 2 }}>
-            {steps[activeStep]?.description ??
-              "You’ve completed onboarding. You can start creating campaigns any time."}
-          </Typography>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">
+              {completed === steps.length
+                ? "You're all set"
+                : `${completed} of ${steps.length} complete`}
+            </CardTitle>
+            <CardDescription>{progressPct}%</CardDescription>
+          </div>
+          <Progress value={progressPct} className="mt-3" />
+        </CardHeader>
+      </Card>
 
-          <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-            {steps[activeStep]?.cta?.href ? (
-              <Button variant="contained" component="a" href={steps[activeStep].cta.href}>
-                {steps[activeStep].cta.label}
-              </Button>
-            ) : steps[activeStep]?.cta?.to ? (
-              <Button
-                variant="contained"
-                component={Link}
-                to={steps[activeStep].cta.to}
-              >
-                {steps[activeStep].cta.label}
+      <ol className="space-y-3">
+        {loading
+          ? Array.from({ length: 5 }).map((_, i) => (
+              <li key={i}>
+                <Skeleton className="h-20 w-full rounded-lg" />
+              </li>
+            ))
+          : steps.map((s, i) => <StepRow key={s.key} step={s} index={i} />)}
+      </ol>
+    </div>
+  );
+}
+
+function StepRow({ step, index }) {
+  const Icon = step.icon;
+  return (
+    <li>
+      <Card
+        className={cn(
+          "transition-colors",
+          step.done ? "border-success/40 bg-success/5" : ""
+        )}
+      >
+        <CardContent className="flex items-center gap-4 p-4">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-background">
+            {step.done ? (
+              <CircleCheck className="h-5 w-5 text-success" />
+            ) : (
+              <Circle className="h-5 w-5 text-muted-foreground" />
+            )}
+          </span>
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <Icon className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold text-foreground">
+                {index + 1}. {step.label}
+              </h3>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {step.description}
+            </p>
+          </div>
+          {!step.done ? (
+            step.cta?.href ? (
+              <Button asChild variant="outline" size="sm">
+                <a href={step.cta.href}>
+                  {step.cta.label}
+                  <ArrowRight />
+                </a>
               </Button>
             ) : (
-              <Button variant="contained" component={Link} to="/campaigns">
-                Go to Campaigns
+              <Button asChild variant="outline" size="sm">
+                <Link to={step.cta.to}>
+                  {step.cta.label}
+                  <ArrowRight />
+                </Link>
               </Button>
-            )}
-
-            <Button variant="outlined" onClick={() => window.location.reload()}>
-              Refresh status
-            </Button>
-          </Box>
+            )
+          ) : null}
         </CardContent>
       </Card>
-    </Box>
+    </li>
   );
 }

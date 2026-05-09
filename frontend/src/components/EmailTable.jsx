@@ -1,150 +1,136 @@
-// src/components/EmailTable.jsx
 import React from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+
+import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
+  TableHeader,
   TableRow,
-  Paper,
-  Chip,
-  TablePagination,
-} from "@mui/material";
+} from "@/components/ui/table";
 
-const EmailTable = ({ analytics, pagination, onPageChange }) => {
-  const getStatusColor = (status) => {
-    switch (status?.toLowerCase()) {
-      case "sent":
-        return "#2196f3";
-      case "delivered":
-        return "#4caf50";
-      case "failed":
-        return "#f44336";
-      default:
-        return "#757575";
-    }
-  };
+const STATUS_VARIANT = {
+  sent: "info",
+  delivered: "success",
+  failed: "destructive",
+};
+const TYPE_VARIANT = {
+  main: "secondary",
+  follow_up: "warning",
+};
 
-  const getEmailTypeColor = (type) => {
-    switch (type?.toLowerCase()) {
-      case "main":
-        return "#9c27b0"; // Purple for main emails
-      case "follow_up":
-        return "#ff9800"; // Orange for follow-ups
-      default:
-        return "#757575";
-    }
-  };
+function variantFor(map, value, fallback = "outline") {
+  return map[value?.toLowerCase()] ?? fallback;
+}
 
-  const handleChangePage = (event, newPage) => {
-    if (onPageChange) {
-      onPageChange(newPage + 1);
-    }
-  };
-
-  // Add pagination defaults
-  const paginationConfig = pagination || {
-    total: analytics?.length || 0,
+export default function EmailTable({ analytics, pagination, onPageChange }) {
+  const rows = analytics ?? [];
+  const config = pagination ?? {
+    total: rows.length,
     page: 1,
-    page_size: analytics?.length || 20,
+    page_size: rows.length || 20,
     total_pages: 1,
   };
 
   return (
-    <TableContainer
-      component={Paper}
-      style={{
-        marginTop: "1rem",
-        boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-        borderRadius: "8px",
-      }}
-    >
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
       <Table>
-        <TableHead>
-          <TableRow style={{ backgroundColor: "#f5f5f5" }}>
-            <TableCell style={{ fontWeight: "bold" }}>S.No</TableCell>
-            <TableCell style={{ fontWeight: "bold" }}>Recruiter</TableCell>
-            <TableCell style={{ fontWeight: "bold" }}>Company</TableCell>
-            <TableCell style={{ fontWeight: "bold" }}>Type</TableCell>
-            <TableCell style={{ fontWeight: "bold" }}>Status</TableCell>
-            <TableCell style={{ fontWeight: "bold" }}>Opened</TableCell>
-            <TableCell style={{ fontWeight: "bold" }}>Open Count</TableCell>
-            <TableCell style={{ fontWeight: "bold" }}>Sent Date</TableCell>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-12">#</TableHead>
+            <TableHead>Recruiter</TableHead>
+            <TableHead>Company</TableHead>
+            <TableHead>Type</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Opened</TableHead>
+            <TableHead>Opens</TableHead>
+            <TableHead>Sent</TableHead>
           </TableRow>
-        </TableHead>
+        </TableHeader>
         <TableBody>
-          {analytics &&
-            analytics.map((row, index) => (
-              <TableRow
-                key={row.email_id}
-                sx={{ "&:hover": { backgroundColor: "#f5f5f5" } }}
+          {rows.length === 0 ? (
+            <TableRow>
+              <TableCell
+                colSpan={8}
+                className="py-10 text-center text-sm text-muted-foreground"
               >
-                <TableCell>{index + 1}</TableCell>
-                <TableCell style={{ fontWeight: "500" }}>
+                No emails to show.
+              </TableCell>
+            </TableRow>
+          ) : (
+            rows.map((row, idx) => (
+              <TableRow key={row.email_id ?? idx}>
+                <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
+                <TableCell className="font-medium text-foreground">
                   {row.recruiter_name}
                 </TableCell>
                 <TableCell>{row.company}</TableCell>
                 <TableCell>
-                  <Chip
-                    label={row.email_type}
-                    size="small"
-                    style={{
-                      backgroundColor: getEmailTypeColor(row.email_type),
-                      color: "white",
-                    }}
-                  />
+                  <Badge variant={variantFor(TYPE_VARIANT, row.email_type)}>
+                    {row.email_type}
+                  </Badge>
                 </TableCell>
                 <TableCell>
-                  <Chip
-                    label={row.status}
-                    size="small"
-                    style={{
-                      backgroundColor: getStatusColor(row.status),
-                      color: "white",
-                    }}
-                  />
+                  <Badge variant={variantFor(STATUS_VARIANT, row.status)}>
+                    {row.status}
+                  </Badge>
                 </TableCell>
                 <TableCell>
-                  <Chip
-                    label={row.is_opened ? "Opened" : "Not Opened"}
-                    size="small"
-                    style={{
-                      backgroundColor: row.is_opened ? "#4caf50" : "#f44336",
-                      color: "white",
-                    }}
-                  />
+                  <Badge variant={row.is_opened ? "success" : "outline"}>
+                    {row.is_opened ? "Opened" : "Not opened"}
+                  </Badge>
                 </TableCell>
-                <TableCell>
-                  <Chip
-                    label={row.open_count}
-                    size="small"
-                    style={{
-                      backgroundColor:
-                        row.open_count > 0 ? "#2196f3" : "#757575",
-                      color: "white",
-                    }}
-                  />
+                <TableCell className={cn(row.open_count > 0 && "text-foreground")}>
+                  {row.open_count ?? 0}
                 </TableCell>
-                <TableCell style={{ color: "#666" }}>
-                  {new Date(row.sent_date).toLocaleString()}
+                <TableCell className="whitespace-nowrap text-muted-foreground">
+                  {row.sent_date
+                    ? new Date(row.sent_date).toLocaleString()
+                    : "—"}
                 </TableCell>
               </TableRow>
-            ))}
+            ))
+          )}
         </TableBody>
       </Table>
-      {pagination && ( // Only show pagination if it's provided
-        <TablePagination
-          component="div"
-          count={paginationConfig.total}
-          page={paginationConfig.page - 1}
-          rowsPerPage={paginationConfig.page_size}
-          rowsPerPageOptions={[20]}
-          onPageChange={handleChangePage}
-        />
-      )}
-    </TableContainer>
-  );
-};
 
-export default EmailTable;
+      {pagination ? (
+        <div className="flex items-center justify-between border-t border-border px-3 py-2 text-xs text-muted-foreground">
+          <span>
+            Showing {(config.page - 1) * config.page_size + 1}–
+            {Math.min(config.page * config.page_size, config.total)} of {config.total}
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              disabled={config.page <= 1}
+              onClick={() => onPageChange?.(config.page - 1)}
+              aria-label="Previous page"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="px-2">
+              Page {config.page} / {config.total_pages || 1}
+            </span>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              disabled={config.page >= (config.total_pages || 1)}
+              onClick={() => onPageChange?.(config.page + 1)}
+              aria-label="Next page"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}

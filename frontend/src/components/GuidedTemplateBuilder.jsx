@@ -1,23 +1,25 @@
-// GuidedTemplateBuilder — KAN-20
-// Structured form that auto-generates a professional HTML email body.
-// Live preview updates as the user types.
-// Two exit paths: save directly, or hand off to the TipTap free-form editor.
 import React, { useState } from "react";
+
+import { generateTemplateHtml } from "@/utils/templateGenerator";
+
+import { Button } from "@/components/ui/button";
 import {
-  Box,
-  Grid,
-  TextField,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import {
   Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Button,
-  Typography,
-  Paper,
-  Stack,
-  Divider,
-} from "@mui/material";
-import { generateTemplateHtml } from "../utils/templateGenerator";
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const INITIAL_FIELDS = {
   templateName: "",
@@ -47,18 +49,20 @@ const REQUIRED_FIELDS = [
   "skills",
 ];
 
-/**
- * @param {object} props
- * @param {(html: string, subject: string, name: string, type: string) => void} props.onHandoffToEditor
- * @param {(templateData: object) => void} props.onSave
- * @param {() => void} props.onCancel
- */
-export default function GuidedTemplateBuilder({ onHandoffToEditor, onSave, onCancel }) {
+export default function GuidedTemplateBuilder({
+  onHandoffToEditor,
+  onSave,
+  onCancel,
+  saving = false,
+}) {
   const [fields, setFields] = useState(INITIAL_FIELDS);
 
-  const set = (key) => (e) => setFields((f) => ({ ...f, [key]: e.target.value }));
+  const set = (key) => (value) =>
+    setFields((f) => ({ ...f, [key]: value }));
 
-  const isComplete = REQUIRED_FIELDS.every((k) => fields[k].trim() !== "");
+  const isComplete = REQUIRED_FIELDS.every(
+    (k) => fields[k].trim() !== ""
+  );
 
   const generatedHtml = isComplete
     ? generateTemplateHtml({
@@ -83,182 +87,205 @@ export default function GuidedTemplateBuilder({ onHandoffToEditor, onSave, onCan
   });
 
   return (
-    <Box>
-      <Typography variant="h6" gutterBottom>
-        Guided Template Builder
-      </Typography>
+    <div className="space-y-4">
+      <header>
+        <h2 className="text-lg font-semibold">Guided template builder</h2>
+        <p className="text-sm text-muted-foreground">
+          Fill in your details and we'll assemble a clean, professional email.
+        </p>
+      </header>
 
-      <Grid container spacing={3}>
-        {/* ── Left: form ──────────────────────────────────────────────── */}
-        <Grid item xs={12} md={6}>
-          <Stack spacing={2}>
-            <TextField
-              label="Template Name"
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>About you</CardTitle>
+            <CardDescription>Used to bake personal details into the email.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <FormField
+              label="Template name"
+              required
+              testid="field-templateName"
               value={fields.templateName}
               onChange={set("templateName")}
-              size="small"
-              required
-              inputProps={{ "data-testid": "field-templateName" }}
             />
-
-            <FormControl size="small" required>
-              <InputLabel>Template Type</InputLabel>
+            <div className="grid gap-2">
+              <Label>Template type</Label>
               <Select
-                label="Template Type"
                 value={fields.templateType}
-                onChange={set("templateType")}
-                inputProps={{ "data-testid": "field-templateType" }}
+                onValueChange={set("templateType")}
               >
-                <MenuItem value="MAIN">Main Email</MenuItem>
-                <MenuItem value="FOLLOW_UP">Follow-up</MenuItem>
+                <SelectTrigger data-testid="field-templateType">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="MAIN">Main email</SelectItem>
+                  <SelectItem value="FOLLOW_UP">Follow-up</SelectItem>
+                </SelectContent>
               </Select>
-            </FormControl>
-
-            <TextField
-              label="Subject Line"
+            </div>
+            <FormField
+              label="Subject line"
+              required
+              testid="field-subject"
               value={fields.subject}
               onChange={set("subject")}
-              size="small"
-              required
-              inputProps={{ "data-testid": "field-subject" }}
             />
-
-            <Divider />
-
-            <TextField
-              label="Your Name"
+            <Separator />
+            <FormField
+              label="Your name"
+              required
+              testid="field-yourName"
               value={fields.yourName}
               onChange={set("yourName")}
-              size="small"
-              required
-              inputProps={{ "data-testid": "field-yourName" }}
             />
-            <TextField
-              label="Your Role (e.g. Software Engineer)"
+            <FormField
+              label="Your role"
+              required
+              testid="field-yourRole"
               value={fields.yourRole}
               onChange={set("yourRole")}
-              size="small"
-              required
-              inputProps={{ "data-testid": "field-yourRole" }}
+              placeholder="e.g. Software Engineer"
             />
-            <TextField
-              label="School"
-              value={fields.school}
-              onChange={set("school")}
-              size="small"
-              required
-              inputProps={{ "data-testid": "field-school" }}
-            />
-            <TextField
-              label="Graduation Year"
-              value={fields.gradYear}
-              onChange={set("gradYear")}
-              size="small"
-              required
-              inputProps={{ "data-testid": "field-gradYear" }}
-            />
-
-            <Divider />
-
-            <TextField
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField
+                label="School"
+                required
+                testid="field-school"
+                value={fields.school}
+                onChange={set("school")}
+              />
+              <FormField
+                label="Graduation year"
+                required
+                testid="field-gradYear"
+                value={fields.gradYear}
+                onChange={set("gradYear")}
+              />
+            </div>
+            <Separator />
+            <FormField
               label="Achievement 1"
+              required
+              testid="field-achievement1"
               value={fields.achievement1}
               onChange={set("achievement1")}
-              size="small"
-              required
-              inputProps={{ "data-testid": "field-achievement1" }}
             />
-            <TextField
+            <FormField
               label="Achievement 2"
+              required
+              testid="field-achievement2"
               value={fields.achievement2}
               onChange={set("achievement2")}
-              size="small"
-              required
-              inputProps={{ "data-testid": "field-achievement2" }}
             />
-            <TextField
+            <FormField
               label="Achievement 3 (optional)"
+              testid="field-achievement3"
               value={fields.achievement3}
               onChange={set("achievement3")}
-              size="small"
-              inputProps={{ "data-testid": "field-achievement3" }}
             />
-
-            <Divider />
-
-            <TextField
-              label="Key Skills (comma-separated)"
+            <Separator />
+            <FormField
+              label="Key skills (comma-separated)"
+              required
+              testid="field-skills"
               value={fields.skills}
               onChange={set("skills")}
-              size="small"
-              required
-              inputProps={{ "data-testid": "field-skills" }}
+              placeholder="React, Python, SQL"
             />
-
-            <FormControl size="small">
-              <InputLabel>Call to Action</InputLabel>
+            <div className="grid gap-2">
+              <Label>Call to action</Label>
               <Select
-                label="Call to Action"
                 value={fields.ctaPreference}
-                onChange={set("ctaPreference")}
+                onValueChange={set("ctaPreference")}
               >
-                <MenuItem value="coffee_chat">Virtual coffee chat (20 min)</MenuItem>
-                <MenuItem value="virtual_call">Brief virtual call</MenuItem>
-                <MenuItem value="quick_call">Quick call (15 min)</MenuItem>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="coffee_chat">
+                    Virtual coffee chat (20 min)
+                  </SelectItem>
+                  <SelectItem value="virtual_call">Brief virtual call</SelectItem>
+                  <SelectItem value="quick_call">Quick call (15 min)</SelectItem>
+                </SelectContent>
               </Select>
-            </FormControl>
-          </Stack>
-        </Grid>
+            </div>
+          </CardContent>
+        </Card>
 
-        {/* ── Right: live preview ──────────────────────────────────────── */}
-        <Grid item xs={12} md={6}>
-          <Typography variant="subtitle2" gutterBottom>
-            Live Preview
-          </Typography>
-          <Paper
-            variant="outlined"
-            sx={{ p: 2, minHeight: 300, overflowY: "auto", bgcolor: "grey.50" }}
-          >
-            {isComplete ? (
-              /* Preview renders as real HTML — content comes from the user's own form inputs */
-              <Box dangerouslySetInnerHTML={{ __html: generatedHtml }} />
-            ) : (
-              <Typography variant="body2" color="text.secondary">
-                Fill in all required fields to see a preview.
-              </Typography>
-            )}
-          </Paper>
-        </Grid>
-      </Grid>
+        <Card>
+          <CardHeader>
+            <CardTitle>Live preview</CardTitle>
+            <CardDescription>
+              {isComplete
+                ? "This is what recipients will see."
+                : "Fill in the required fields to see a preview."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="min-h-[460px] rounded-md border border-border bg-white p-4 text-sm text-zinc-900">
+              {isComplete ? (
+                /* Preview renders user-supplied content as HTML; safe because the
+                   value comes from this user's own form state. */
+                <div dangerouslySetInnerHTML={{ __html: generatedHtml }} />
+              ) : (
+                <p className="text-zinc-500">
+                  Fill in all required fields to see a preview.
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-      {/* ── Actions ──────────────────────────────────────────────────────── */}
-      <Stack direction="row" spacing={2} sx={{ mt: 3 }}>
-        <Button variant="outlined" onClick={onCancel}>
+      <div className="flex items-center justify-between gap-2 border-t border-border pt-4">
+        <Button variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Box sx={{ flexGrow: 1 }} />
-        <Button
-          variant="outlined"
-          disabled={!isComplete}
-          onClick={() =>
-            onHandoffToEditor(
-              generatedHtml,
-              fields.subject,
-              fields.templateName,
-              fields.templateType
-            )
-          }
-        >
-          Edit in Rich Text Editor
-        </Button>
-        <Button
-          variant="contained"
-          disabled={!isComplete}
-          onClick={() => onSave(templateData())}
-        >
-          Save Template
-        </Button>
-      </Stack>
-    </Box>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            disabled={!isComplete}
+            onClick={() =>
+              onHandoffToEditor(
+                generatedHtml,
+                fields.subject,
+                fields.templateName,
+                fields.templateType
+              )
+            }
+          >
+            Edit in Rich Text Editor
+          </Button>
+          <Button
+            disabled={!isComplete || saving}
+            loading={saving}
+            onClick={() => onSave(templateData())}
+          >
+            Save Template
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FormField({ label, value, onChange, required, testid, placeholder }) {
+  const id = React.useId();
+  return (
+    <div className="grid gap-2">
+      <Label htmlFor={id}>
+        {label}
+        {required ? <span className="ml-0.5 text-destructive">*</span> : null}
+      </Label>
+      <Input
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        data-testid={testid}
+      />
+    </div>
   );
 }

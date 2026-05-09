@@ -1,18 +1,13 @@
-// src/components/Dashboard.jsx
 import React, { useEffect, useState } from "react";
 import {
-  Container,
-  Grid2,
-  Paper,
-  Typography,
-  CircularProgress,
-  Box,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Alert,
-} from "@mui/material";
+  AtSign,
+  BarChart3,
+  Building2,
+  Eye,
+  Mail,
+  RefreshCcw,
+} from "lucide-react";
+
 import {
   fetchAnalytics,
   fetchCompanyAnalytics,
@@ -22,17 +17,47 @@ import {
   getCampaignMetrics,
   getCampaignUnopened,
   listCampaigns,
-} from "../services/api";
-import EmailTable from "./EmailTable";
-import CompanyAnalytics from "./CompanyAnalytics";
+} from "@/lib/api";
+import CompanyAnalytics from "@/components/CompanyAnalytics";
+import EmailTable from "@/components/EmailTable";
 
-const Dashboard = () => {
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
+
+const STAT_CARDS = [
+  { id: "total", label: "Total emails", icon: Mail },
+  { id: "opened", label: "Opened", icon: Eye },
+  { id: "opens", label: "Total opens", icon: BarChart3 },
+  { id: "extra", label: "Companies", icon: Building2 },
+];
+
+export default function Dashboard() {
   const [analytics, setAnalytics] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loadingInitial, setLoadingInitial] = useState(true);
+  const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState(null);
   const [companies, setCompanies] = useState([]);
   const [campaigns, setCampaigns] = useState([]);
-  const [viewMode, setViewMode] = useState("company"); // 'company' | 'campaign'
+  const [viewMode, setViewMode] = useState("company");
   const [selectedCompany, setSelectedCompany] = useState("all");
   const [selectedCampaignId, setSelectedCampaignId] = useState("");
   const [companyDetails, setCompanyDetails] = useState(null);
@@ -41,33 +66,40 @@ const Dashboard = () => {
   const [pagination, setPagination] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Fetch initial data (companies list and analytics)
   useEffect(() => {
-    const fetchInitialData = async () => {
+    let cancelled = false;
+    (async () => {
       try {
-        setLoading(true);
+        setLoadingInitial(true);
         const [companiesData, analyticsData, campaignsData] = await Promise.all([
           fetchCompanies(),
           fetchCompanyAnalytics(),
           listCampaigns(),
         ]);
-        setCompanies(companiesData.companies);
-        setCompanyAnalytics(analyticsData.company_analytics);
-        setCampaigns(campaignsData);
-        setSelectedCampaignId(campaignsData[0]?.id ?? "");
+        if (cancelled) return;
+        setCompanies(companiesData.companies ?? []);
+        setCompanyAnalytics(analyticsData.company_analytics ?? []);
+        setCampaigns(campaignsData ?? []);
+        setSelectedCampaignId(campaignsData?.[0]?.id?.toString() ?? "");
       } catch (err) {
-        setError("Failed to load initial data");
-        console.error("Error:", err);
+        if (cancelled) return;
+        setError(err.message ?? "Failed to load dashboard");
+      } finally {
+        if (!cancelled) setLoadingInitial(false);
       }
+    })();
+    return () => {
+      cancelled = true;
     };
-    fetchInitialData();
   }, []);
 
-  // Handle company data loading based on selection
   useEffect(() => {
-    const loadCompanyData = async () => {
+    if (loadingInitial) return;
+    let cancelled = false;
+    (async () => {
       try {
-        setLoading(true);
+        setLoadingDetail(true);
+        setError(null);
         if (viewMode === "campaign") {
           if (!selectedCampaignId) {
             setAnalytics([]);
@@ -80,6 +112,7 @@ const Dashboard = () => {
             getCampaignMetrics(selectedCampaignId),
             getCampaignUnopened(selectedCampaignId),
           ]);
+          if (cancelled) return;
           setCampaignMetrics(metrics);
           setAnalytics(
             unopened.map((r) => ({
@@ -97,6 +130,7 @@ const Dashboard = () => {
           setCompanyDetails(null);
         } else if (selectedCompany === "all") {
           const data = await fetchAnalytics(currentPage);
+          if (cancelled) return;
           setAnalytics(data.analytics);
           setPagination(data.pagination);
           setCompanyDetails(null);
@@ -105,276 +139,274 @@ const Dashboard = () => {
             fetchCompanyDetails(selectedCompany),
             fetchCompanyEmails(selectedCompany),
           ]);
+          if (cancelled) return;
           setCompanyDetails(details.company_details);
           setAnalytics(emails.company_emails);
           setPagination(null);
         }
       } catch (err) {
-        setError(
-          `Failed to load ${
-            viewMode === "campaign"
-              ? "campaign data"
-              : selectedCompany === "all"
-                ? "analytics"
-                : selectedCompany
-          } data`
-        );
-        console.error("Error:", err);
+        if (cancelled) return;
+        setError(err.message ?? "Failed to load detail data");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoadingDetail(false);
       }
+    })();
+    return () => {
+      cancelled = true;
     };
-    loadCompanyData();
-  }, [viewMode, selectedCompany, selectedCampaignId, currentPage]);
+  }, [loadingInitial, viewMode, selectedCompany, selectedCampaignId, currentPage]);
 
-  const calculateStats = () => {
-    if (!analytics) return {};
+  const stats = computeStats(analytics, viewMode, campaignMetrics, selectedCompany);
 
-    return {
-      totalEmails: analytics.length,
-      openedEmails: analytics.filter((email) => email.is_opened).length,
-      totalOpens: analytics.reduce((sum, email) => sum + email.open_count, 0),
-      uniqueCompanies:
-        selectedCompany === "all"
-          ? new Set(analytics.map((email) => email.company)).size
-          : 1,
-    };
-  };
-
-  const handleCompanyChange = (event) => {
-    setSelectedCompany(event.target.value);
-    setCurrentPage(1);
-  };
-
-  const handleViewModeChange = (event) => {
-    setViewMode(event.target.value);
-    setCurrentPage(1);
-    setError(null);
-  };
-
-  const handleCampaignChange = (event) => {
-    setSelectedCampaignId(event.target.value);
-    setCurrentPage(1);
-  };
-
-  const handlePageChange = (newPage) => {
-    setCurrentPage(newPage);
-  };
-
-  if (loading) {
-    return (
-      <Container style={{ textAlign: "center", paddingTop: "2rem" }}>
-        <CircularProgress />
-      </Container>
-    );
+  if (loadingInitial) {
+    return <DashboardSkeleton />;
   }
-
-  if (error) {
-    return (
-      <Container style={{ paddingTop: "2rem" }}>
-        <Alert severity="error">{error}</Alert>
-      </Container>
-    );
-  }
-
-  const stats = calculateStats();
 
   return (
-    <Container maxWidth="lg" style={{ marginTop: "2rem" }}>
-      <Typography variant="h4" gutterBottom>
-        {viewMode === "campaign"
-          ? "Campaign Tracking Dashboard"
-          : "Email Analytics Dashboard"}
-      </Typography>
+    <div className="space-y-6">
+      <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {viewMode === "campaign"
+              ? "Campaign tracking"
+              : "Email analytics"}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Overview of your outreach activity and campaign performance.
+          </p>
+        </div>
 
-      {/* Mode + selector */}
-      <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap", mb: 3 }}>
-        <FormControl sx={{ minWidth: 220 }}>
-          <InputLabel id="mode-select-label">View</InputLabel>
-          <Select
-            labelId="mode-select-label"
-            value={viewMode}
-            label="View"
-            onChange={handleViewModeChange}
-          >
-            <MenuItem value="company">By company</MenuItem>
-            <MenuItem value="campaign">By campaign</MenuItem>
+        <div className="flex flex-wrap gap-2">
+          <Select value={viewMode} onValueChange={setViewMode}>
+            <SelectTrigger className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="company">By company</SelectItem>
+              <SelectItem value="campaign">By campaign</SelectItem>
+            </SelectContent>
           </Select>
-        </FormControl>
 
-        {viewMode === "company" ? (
-          <FormControl sx={{ minWidth: 260 }}>
-            <InputLabel id="company-select-label">Company</InputLabel>
+          {viewMode === "company" ? (
             <Select
-              labelId="company-select-label"
-              id="company-select"
               value={selectedCompany}
-              label="Company"
-              onChange={handleCompanyChange}
+              onValueChange={(v) => {
+                setSelectedCompany(v);
+                setCurrentPage(1);
+              }}
             >
-              <MenuItem value="all">All Companies</MenuItem>
-              {companies.map((company) => (
-                <MenuItem key={company} value={company}>
-                  {company}
-                </MenuItem>
-              ))}
+              <SelectTrigger className="w-56">
+                <SelectValue placeholder="All companies" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All companies</SelectItem>
+                {companies.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
-          </FormControl>
-        ) : (
-          <FormControl sx={{ minWidth: 320 }}>
-            <InputLabel id="campaign-select-label">Campaign</InputLabel>
+          ) : (
             <Select
-              labelId="campaign-select-label"
               value={selectedCampaignId}
-              label="Campaign"
-              onChange={handleCampaignChange}
+              onValueChange={setSelectedCampaignId}
             >
-              {campaigns.map((c) => (
-                <MenuItem key={c.id} value={c.id}>
-                  {c.name}
-                </MenuItem>
-              ))}
+              <SelectTrigger className="w-72">
+                <SelectValue placeholder="Select a campaign" />
+              </SelectTrigger>
+              <SelectContent>
+                {campaigns.map((c) => (
+                  <SelectItem key={c.id} value={c.id.toString()}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
-          </FormControl>
-        )}
-      </Box>
+          )}
+        </div>
+      </header>
 
-      {/* Summary Statistics */}
-      <Grid2 container spacing={3} style={{ marginBottom: "2rem" }}>
-        <Grid2 item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={3}
-            style={{
-              padding: "1.5rem",
-              textAlign: "center",
-              backgroundColor: "#f5f5f5",
-            }}
-          >
-            <Typography variant="h6">Total Emails</Typography>
-            <Typography variant="h4" color="primary">
-              {stats.totalEmails}
-            </Typography>
-          </Paper>
-        </Grid2>
-        <Grid2 item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={3}
-            style={{
-              padding: "1.5rem",
-              textAlign: "center",
-              backgroundColor: "#e8f5e9",
-            }}
-          >
-            <Typography variant="h6">
-              {viewMode === "campaign" ? "Opened (main)" : "Opened Emails"}
-            </Typography>
-            <Typography variant="h4" color="success.main">
-              {viewMode === "campaign"
-                ? `${campaignMetrics?.opened_main_count ?? 0} (${Math.round(
-                    campaignMetrics?.open_rate_pct ?? 0
-                  )}%)`
-                : `${stats.openedEmails} (${Math.round(
-                    (stats.openedEmails / stats.totalEmails) * 100
-                  )}%)`}
-            </Typography>
-          </Paper>
-        </Grid2>
-        <Grid2 item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={3}
-            style={{
-              padding: "1.5rem",
-              textAlign: "center",
-              backgroundColor: "#e3f2fd",
-            }}
-          >
-            <Typography variant="h6">Total Opens</Typography>
-            <Typography variant="h4" color="info.main">
-              {stats.totalOpens}
-            </Typography>
-          </Paper>
-        </Grid2>
-        <Grid2 item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={3}
-            style={{
-              padding: "1.5rem",
-              textAlign: "center",
-              backgroundColor: "#fff3e0",
-            }}
-          >
-            <Typography variant="h6">
-              {viewMode === "campaign" ? "Unopened" : "Companies"}
-            </Typography>
-            <Typography variant="h4" color="warning.main">
-              {viewMode === "campaign" ? stats.totalEmails : stats.uniqueCompanies}
-            </Typography>
-          </Paper>
-        </Grid2>
-      </Grid2>
+      {error ? (
+        <Alert variant="destructive">
+          <RefreshCcw className="h-4 w-4" />
+          <AlertTitle>Couldn't load dashboard data</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
 
-      {/* Company Details */}
-      {viewMode === "company" && companyDetails && (
-        <Box mb={3}>
-          <Paper elevation={3} sx={{ p: 3 }}>
-            <Typography variant="h5" gutterBottom>
-              {selectedCompany} Details
-            </Typography>
-            <Grid2 container spacing={2}>
-              <Grid2 item xs={12} md={6}>
-                <Typography variant="body1">
-                  Total Emails: {companyDetails.total_emails}
-                </Typography>
-                <Typography variant="body1">
-                  Opened Emails: {companyDetails.opened_emails}
-                </Typography>
-                <Typography variant="body1">
-                  Follow-ups: {companyDetails.follow_ups}
-                </Typography>
-              </Grid2>
-              <Grid2 item xs={12} md={6}>
-                <Typography variant="body1">
-                  Total Opens: {companyDetails.total_opens}
-                </Typography>
-                <Typography variant="body1">
-                  Last Interaction:{" "}
-                  {companyDetails.last_interaction
-                    ? new Date(companyDetails.last_interaction).toLocaleString()
-                    : "N/A"}
-                </Typography>
-              </Grid2>
-            </Grid2>
-          </Paper>
-        </Box>
-      )}
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {STAT_CARDS.map(({ id, label, icon: Icon }) => (
+          <StatCard
+            key={id}
+            label={statLabel(id, viewMode, label)}
+            value={stats[id] ?? "—"}
+            icon={Icon}
+            loading={loadingDetail}
+          />
+        ))}
+      </section>
 
-      {/* Company Analytics Table (shown only for 'all' view) */}
-      {viewMode === "company" && selectedCompany === "all" && (
-        <Box mb={3}>
-          <Typography variant="h5" gutterBottom>
-            Company-wise Analytics
-          </Typography>
-          <CompanyAnalytics analytics={companyAnalytics} />
-        </Box>
-      )}
+      {viewMode === "company" && companyDetails ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">{selectedCompany}</CardTitle>
+            <CardDescription>Company snapshot</CardDescription>
+          </CardHeader>
+          <CardContent className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+            <DetailStat label="Total emails" value={companyDetails.total_emails} />
+            <DetailStat label="Opened" value={companyDetails.opened_emails} />
+            <DetailStat label="Follow-ups" value={companyDetails.follow_ups} />
+            <DetailStat label="Total opens" value={companyDetails.total_opens} />
+            <DetailStat
+              label="Last interaction"
+              value={
+                companyDetails.last_interaction
+                  ? new Date(companyDetails.last_interaction).toLocaleString()
+                  : "—"
+              }
+              wide
+            />
+          </CardContent>
+        </Card>
+      ) : null}
 
-      {/* Detailed Email Table */}
-      <Box>
-        <Typography variant="h5" gutterBottom>
-          {viewMode === "campaign"
-            ? "Unopened contacts (main)"
-            : selectedCompany === "all"
-            ? "All Email Logs"
-            : `${selectedCompany} Email Logs`}
-        </Typography>
-        <EmailTable
-          analytics={analytics}
-          pagination={pagination}
-          onPageChange={handlePageChange}
+      {viewMode === "company" && selectedCompany === "all" ? (
+        <section>
+          <SectionHeading
+            icon={AtSign}
+            title="Company-wise analytics"
+            subtitle="Aggregated metrics across all your outreach lists."
+          />
+          {loadingDetail ? (
+            <Skeleton className="h-64 w-full rounded-lg" />
+          ) : (
+            <CompanyAnalytics analytics={companyAnalytics} />
+          )}
+        </section>
+      ) : null}
+
+      <section>
+        <SectionHeading
+          icon={Mail}
+          title={
+            viewMode === "campaign"
+              ? "Unopened recipients (main email)"
+              : selectedCompany === "all"
+                ? "All email logs"
+                : `${selectedCompany} email logs`
+          }
+          subtitle="Most recent activity from your outreach inbox."
         />
-      </Box>
-    </Container>
+        {loadingDetail ? (
+          <Skeleton className="h-72 w-full rounded-lg" />
+        ) : (
+          <EmailTable
+            analytics={analytics}
+            pagination={pagination}
+            onPageChange={setCurrentPage}
+          />
+        )}
+      </section>
+    </div>
   );
-};
+}
 
-export default Dashboard;
+function statLabel(id, viewMode, fallback) {
+  if (id === "extra") return viewMode === "campaign" ? "Unopened" : "Companies";
+  if (id === "opened") return viewMode === "campaign" ? "Opened (main)" : "Opened emails";
+  return fallback;
+}
+
+function computeStats(rows, viewMode, campaignMetrics, selectedCompany) {
+  if (!rows) {
+    return { total: "—", opened: "—", opens: "—", extra: "—" };
+  }
+  const total = rows.length;
+  const opened = rows.filter((r) => r.is_opened).length;
+  const opens = rows.reduce((s, r) => s + (r.open_count ?? 0), 0);
+  const uniqueCompanies =
+    selectedCompany === "all" ? new Set(rows.map((r) => r.company)).size : 1;
+
+  if (viewMode === "campaign") {
+    const m = campaignMetrics;
+    return {
+      total: m?.sent_main_count ?? total,
+      opened: m
+        ? `${m.opened_main_count} (${Math.round(m.open_rate_pct ?? 0)}%)`
+        : opened,
+      opens,
+      extra: total,
+    };
+  }
+  return {
+    total,
+    opened: total
+      ? `${opened} (${Math.round((opened / total) * 100)}%)`
+      : opened,
+    opens,
+    extra: uniqueCompanies,
+  };
+}
+
+function StatCard({ label, value, icon: Icon, loading }) {
+  return (
+    <Card className="overflow-hidden">
+      <CardContent className="flex items-center justify-between p-5">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            {label}
+          </p>
+          {loading ? (
+            <Skeleton className="mt-2 h-7 w-20" />
+          ) : (
+            <p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p>
+          )}
+        </div>
+        <span className="grid h-10 w-10 place-items-center rounded-md border border-border bg-secondary text-muted-foreground">
+          <Icon className="h-5 w-5" />
+        </span>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DetailStat({ label, value, wide }) {
+  return (
+    <div className={cn(wide && "sm:col-span-2 lg:col-span-4")}>
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-1 text-sm font-medium text-foreground">{value ?? "—"}</p>
+    </div>
+  );
+}
+
+function SectionHeading({ icon: Icon, title, subtitle }) {
+  return (
+    <div className="mb-3 flex items-end justify-between">
+      <div>
+        <h2 className="text-base font-semibold">{title}</h2>
+        {subtitle ? (
+          <p className="text-xs text-muted-foreground">{subtitle}</p>
+        ) : null}
+      </div>
+      {Icon ? <Icon className="h-4 w-4 text-muted-foreground" /> : null}
+    </div>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-6">
+      <Skeleton className="h-8 w-64" />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-24 w-full rounded-lg" />
+        ))}
+      </div>
+      <Skeleton className="h-64 w-full rounded-lg" />
+      <Skeleton className="h-72 w-full rounded-lg" />
+    </div>
+  );
+}

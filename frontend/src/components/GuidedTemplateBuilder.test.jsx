@@ -1,17 +1,18 @@
-// Tests for GuidedTemplateBuilder — KAN-20
 import React from "react";
+import { describe, test, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+
 import GuidedTemplateBuilder from "./GuidedTemplateBuilder";
-import * as templateGenerator from "../utils/templateGenerator";
+import * as templateGenerator from "@/utils/templateGenerator";
 
-jest.mock("../utils/templateGenerator");
+vi.mock("@/utils/templateGenerator", () => ({
+  generateTemplateHtml: vi.fn(),
+}));
 
-const noop = () => {};
 const DEFAULT_PROPS = {
-  onHandoffToEditor: jest.fn(),
-  onSave: jest.fn(),
-  onCancel: jest.fn(),
+  onHandoffToEditor: vi.fn(),
+  onSave: vi.fn(),
+  onCancel: vi.fn(),
 };
 
 function fillRequiredFields() {
@@ -46,8 +47,10 @@ function fillRequiredFields() {
 
 describe("GuidedTemplateBuilder", () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    templateGenerator.generateTemplateHtml.mockReturnValue("<p>Generated HTML</p>");
+    vi.clearAllMocks();
+    templateGenerator.generateTemplateHtml.mockReturnValue(
+      "<p>Generated HTML</p>"
+    );
   });
 
   test("renders all required form fields", () => {
@@ -62,24 +65,29 @@ describe("GuidedTemplateBuilder", () => {
     expect(screen.getByTestId("field-skills")).toBeInTheDocument();
   });
 
-  test("Save Template button is disabled when required fields are empty", () => {
+  test("Save and handoff buttons are disabled until required fields are filled", () => {
     render(<GuidedTemplateBuilder {...DEFAULT_PROPS} />);
     expect(screen.getByText("Save Template").closest("button")).toBeDisabled();
-    expect(screen.getByText("Edit in Rich Text Editor").closest("button")).toBeDisabled();
+    expect(
+      screen.getByText("Edit in Rich Text Editor").closest("button")
+    ).toBeDisabled();
   });
 
-  test("buttons become enabled after all required fields are filled", () => {
+  test("buttons enable once all required fields are filled", () => {
     render(<GuidedTemplateBuilder {...DEFAULT_PROPS} />);
     fillRequiredFields();
-    expect(screen.getByText("Save Template").closest("button")).not.toBeDisabled();
-    expect(screen.getByText("Edit in Rich Text Editor").closest("button")).not.toBeDisabled();
+    expect(
+      screen.getByText("Save Template").closest("button")
+    ).not.toBeDisabled();
+    expect(
+      screen.getByText("Edit in Rich Text Editor").closest("button")
+    ).not.toBeDisabled();
   });
 
-  test("Save Template calls onSave with correct template data shape", () => {
+  test("Save Template invokes onSave with the right shape", () => {
     render(<GuidedTemplateBuilder {...DEFAULT_PROPS} />);
     fillRequiredFields();
     fireEvent.click(screen.getByText("Save Template"));
-
     expect(DEFAULT_PROPS.onSave).toHaveBeenCalledWith(
       expect.objectContaining({
         name: "My Template",
@@ -91,11 +99,10 @@ describe("GuidedTemplateBuilder", () => {
     );
   });
 
-  test("Edit in Rich Text Editor calls onHandoffToEditor with html, subject, name, type", () => {
+  test("Edit in Rich Text Editor passes html, subject, name, type", () => {
     render(<GuidedTemplateBuilder {...DEFAULT_PROPS} />);
     fillRequiredFields();
     fireEvent.click(screen.getByText("Edit in Rich Text Editor"));
-
     expect(DEFAULT_PROPS.onHandoffToEditor).toHaveBeenCalledWith(
       "<p>Generated HTML</p>",
       "Hi {{first_name}}",
@@ -104,7 +111,7 @@ describe("GuidedTemplateBuilder", () => {
     );
   });
 
-  test("Cancel button calls onCancel", () => {
+  test("Cancel calls onCancel", () => {
     render(<GuidedTemplateBuilder {...DEFAULT_PROPS} />);
     fireEvent.click(screen.getByText("Cancel"));
     expect(DEFAULT_PROPS.onCancel).toHaveBeenCalled();

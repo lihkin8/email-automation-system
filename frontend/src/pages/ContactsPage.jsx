@@ -1,73 +1,92 @@
-// ContactsPage — manage contact lists (list / edit / delete)
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  IconButton,
-  Paper,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  TextField,
-  Tooltip,
-  Typography,
-} from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
-import DeleteIcon from "@mui/icons-material/Delete";
-import EditIcon from "@mui/icons-material/Edit";
-import UploadFileIcon from "@mui/icons-material/UploadFile";
+  MoreHorizontal,
+  Plus,
+  Trash2,
+  Pencil,
+  Upload,
+} from "lucide-react";
+
 import {
   deleteContactList,
   getContactList,
   listContactLists,
   updateContactList,
-} from "../services/api";
+} from "@/lib/api";
+import { useAction } from "@/lib/useAction";
 
-const SOURCE_COLORS = { TEXT_FILE: "primary", APOLLO: "secondary" };
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+const SOURCE_VARIANT = { TEXT_FILE: "secondary", APOLLO: "info" };
 
 export default function ContactsPage() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState("list"); // 'list' | 'edit'
   const [lists, setLists] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
+
   const [editingList, setEditingList] = useState(null);
   const [editLoading, setEditLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState(null);
 
-  const refreshList = useCallback(async () => {
+  const [deleteTarget, setDeleteTarget] = useState(null);
+
+  const refresh = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    setFetchError(null);
     try {
       const data = await listContactLists();
       setLists(data);
-    } catch {
-      setError("Failed to load contact lists. Please refresh.");
+    } catch (err) {
+      setFetchError(err.message ?? "Failed to load contact lists.");
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    refreshList();
-  }, [refreshList]);
+    refresh();
+  }, [refresh]);
 
-  const handleEditClick = async (row) => {
+  const openEdit = async (row) => {
     setEditLoading(true);
-    setError(null);
+    setEditError(null);
     try {
       const detail = await getContactList(row.id);
       setEditingList({
@@ -76,57 +95,16 @@ export default function ContactsPage() {
         source: detail.source,
         contacts: detail.contacts.map((c) => ({ ...c })),
       });
-      setMode("edit");
-    } catch {
-      setError("Failed to load list contents.");
+    } catch (err) {
+      setEditError(err.message ?? "Failed to load list.");
     } finally {
       setEditLoading(false);
     }
   };
 
-  const handleDeleteConfirm = async () => {
-    if (!deleteTarget) return;
-    try {
-      await deleteContactList(deleteTarget.id);
-      setDeleteTarget(null);
-      await refreshList();
-    } catch (err) {
-      const detail = err?.response?.data?.detail;
-      setError(detail || "Failed to delete contact list.");
-      setDeleteTarget(null);
-    }
-  };
-
-  // ── Edit mode handlers ──────────────────────────────────────────────────────
-
-  const updateContactField = (idx, field, value) => {
-    setEditingList((prev) => {
-      const next = [...prev.contacts];
-      next[idx] = { ...next[idx], [field]: value };
-      return { ...prev, contacts: next };
-    });
-  };
-
-  const removeContactRow = (idx) => {
-    setEditingList((prev) => ({
-      ...prev,
-      contacts: prev.contacts.filter((_, i) => i !== idx),
-    }));
-  };
-
-  const addContactRow = () => {
-    setEditingList((prev) => ({
-      ...prev,
-      contacts: [...prev.contacts, { id: null, name: "", email: "", company: "" }],
-    }));
-  };
-
-  const handleSaveEdit = async () => {
-    if (!editingList) return;
-    setSaving(true);
-    setError(null);
-    try {
-      await updateContactList(editingList.id, {
+  const { run: doSaveEdit, isPending: saving } = useAction(
+    () =>
+      updateContactList(editingList.id, {
         name: editingList.name,
         contacts: editingList.contacts.map((c) => ({
           id: c.id ?? null,
@@ -134,258 +112,337 @@ export default function ContactsPage() {
           email: c.email,
           company: c.company,
         })),
-      });
-      setEditingList(null);
-      setMode("list");
-      await refreshList();
-    } catch {
-      setError("Failed to save changes.");
-    } finally {
-      setSaving(false);
+      }),
+    {
+      loading: "Saving list...",
+      success: "List saved",
+      onSuccess: () => {
+        setEditingList(null);
+        refresh();
+      },
     }
-  };
+  );
 
-  // ── Render: edit mode ───────────────────────────────────────────────────────
+  const { run: doDelete, isPending: deleting } = useAction(
+    () => deleteContactList(deleteTarget.id),
+    {
+      loading: "Deleting list...",
+      success: "List deleted",
+      onSuccess: () => {
+        setDeleteTarget(null);
+        refresh();
+      },
+    }
+  );
 
-  if (mode === "edit" && editingList) {
-    const canSave =
-      editingList.name.trim().length > 0 &&
-      editingList.contacts.every(
-        (c) => c.name.trim() && c.email.trim() && c.company.trim()
-      );
+  const updateContact = (idx, field, value) =>
+    setEditingList((prev) => {
+      const next = [...prev.contacts];
+      next[idx] = { ...next[idx], [field]: value };
+      return { ...prev, contacts: next };
+    });
 
-    return (
-      <Box sx={{ maxWidth: 1000, mx: "auto", mt: 4 }}>
-        <Stack direction="row" alignItems="center" sx={{ mb: 3 }}>
-          <Typography variant="h5" sx={{ flexGrow: 1 }}>
-            Edit Contact List
-          </Typography>
-          <Button
-            onClick={() => {
-              setEditingList(null);
-              setMode("list");
-            }}
-            disabled={saving}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="contained"
-            sx={{ ml: 2 }}
-            onClick={handleSaveEdit}
-            disabled={!canSave || saving}
-            data-testid="save-list-btn"
-          >
-            {saving ? <CircularProgress size={20} /> : "Save Changes"}
-          </Button>
-        </Stack>
+  const removeContact = (idx) =>
+    setEditingList((prev) => ({
+      ...prev,
+      contacts: prev.contacts.filter((_, i) => i !== idx),
+    }));
 
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        )}
+  const addContact = () =>
+    setEditingList((prev) => ({
+      ...prev,
+      contacts: [
+        ...prev.contacts,
+        { id: null, name: "", email: "", company: "" },
+      ],
+    }));
 
-        <TextField
-          label="List Name"
-          value={editingList.name}
-          onChange={(e) =>
-            setEditingList((prev) => ({ ...prev, name: e.target.value }))
-          }
-          fullWidth
-          sx={{ mb: 3 }}
-        />
-
-        <Paper variant="outlined" sx={{ mb: 2 }}>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Name</TableCell>
-                <TableCell>Email</TableCell>
-                <TableCell>Company</TableCell>
-                <TableCell align="right">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {editingList.contacts.map((c, idx) => (
-                <TableRow key={c.id ?? `new-${idx}`}>
-                  <TableCell>
-                    <TextField
-                      size="small"
-                      value={c.name}
-                      onChange={(e) => updateContactField(idx, "name", e.target.value)}
-                      fullWidth
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                      size="small"
-                      value={c.email}
-                      onChange={(e) => updateContactField(idx, "email", e.target.value)}
-                      fullWidth
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                      size="small"
-                      value={c.company}
-                      onChange={(e) => updateContactField(idx, "company", e.target.value)}
-                      fullWidth
-                    />
-                  </TableCell>
-                  <TableCell align="right">
-                    <Tooltip title="Remove contact">
-                      <IconButton
-                        size="small"
-                        color="error"
-                        onClick={() => removeContactRow(idx)}
-                        aria-label={`remove-row-${idx}`}
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {editingList.contacts.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={4} align="center">
-                    <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-                      No contacts. Add one below.
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </Paper>
-
-        <Button
-          variant="outlined"
-          startIcon={<AddIcon />}
-          onClick={addContactRow}
-          data-testid="add-contact-btn"
-        >
-          Add Contact
-        </Button>
-      </Box>
+  const canSave =
+    editingList?.name.trim().length > 0 &&
+    editingList?.contacts.every(
+      (c) => c.name.trim() && c.email.trim() && c.company.trim()
     );
-  }
-
-  // ── Render: list mode (default) ─────────────────────────────────────────────
 
   return (
-    <Box sx={{ maxWidth: 1000, mx: "auto", mt: 4 }}>
-      <Stack direction="row" alignItems="center" sx={{ mb: 3 }}>
-        <Typography variant="h5" sx={{ flexGrow: 1 }}>
-          Contact Lists
-        </Typography>
-        <Button
-          variant="contained"
-          startIcon={<UploadFileIcon />}
-          onClick={() => navigate("/contacts/import")}
-          data-testid="import-new-list-btn"
-        >
-          Import New List
+    <div className="space-y-6">
+      <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Contacts</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage the lists you'll target with campaigns.
+          </p>
+        </div>
+        <Button onClick={() => navigate("/contacts/import")} data-testid="import-new-list-btn">
+          <Upload />
+          Import new list
         </Button>
-      </Stack>
+      </header>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
+      {fetchError ? (
+        <Alert variant="destructive">
+          <AlertTitle>Couldn't load contact lists</AlertTitle>
+          <AlertDescription>{fetchError}</AlertDescription>
         </Alert>
-      )}
+      ) : null}
 
-      {loading || editLoading ? (
-        <Box sx={{ display: "flex", justifyContent: "center", mt: 6 }}>
-          <CircularProgress />
-        </Box>
+      {loading ? (
+        <Skeleton className="h-64 w-full rounded-lg" />
       ) : lists.length === 0 ? (
-        <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
-            No contact lists yet.
-          </Typography>
-          <Button
-            variant="contained"
-            startIcon={<UploadFileIcon />}
-            onClick={() => navigate("/contacts/import")}
-          >
-            Import Your First List
-          </Button>
-        </Paper>
+        <EmptyState onImport={() => navigate("/contacts/import")} />
       ) : (
-        <Paper variant="outlined">
+        <div className="overflow-hidden rounded-lg border border-border bg-card">
           <Table>
-            <TableHead>
+            <TableHeader>
               <TableRow>
-                <TableCell>Name</TableCell>
-                <TableCell>Source</TableCell>
-                <TableCell>Created</TableCell>
-                <TableCell align="right">Actions</TableCell>
+                <TableHead>Name</TableHead>
+                <TableHead>Source</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead className="w-12 text-right">Actions</TableHead>
               </TableRow>
-            </TableHead>
+            </TableHeader>
             <TableBody>
               {lists.map((l) => (
                 <TableRow key={l.id} data-testid={`list-row-${l.id}`}>
-                  <TableCell>{l.name}</TableCell>
-                  <TableCell>
-                    <Chip
-                      label={l.source}
-                      color={SOURCE_COLORS[l.source] ?? "default"}
-                      size="small"
-                    />
+                  <TableCell className="font-medium text-foreground">
+                    {l.name}
                   </TableCell>
                   <TableCell>
-                    {l.created_at ? new Date(l.created_at).toLocaleDateString() : "—"}
+                    <Badge variant={SOURCE_VARIANT[l.source] ?? "secondary"}>
+                      {l.source}
+                    </Badge>
                   </TableCell>
-                  <TableCell align="right">
-                    <Tooltip title="Edit">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleEditClick(l)}
-                        aria-label={`edit-${l.id}`}
-                      >
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Delete">
-                      <IconButton
-                        size="small"
-                        onClick={() => setDeleteTarget(l)}
-                        aria-label={`delete-${l.id}`}
-                        color="error"
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
+                  <TableCell className="text-muted-foreground">
+                    {l.created_at
+                      ? new Date(l.created_at).toLocaleDateString()
+                      : "—"}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`actions-${l.id}`}
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onSelect={(e) => {
+                            e.preventDefault();
+                            openEdit(l);
+                          }}
+                          aria-label={`edit-${l.id}`}
+                        >
+                          <Pencil />
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onSelect={(e) => {
+                            e.preventDefault();
+                            setDeleteTarget(l);
+                          }}
+                          aria-label={`delete-${l.id}`}
+                        >
+                          <Trash2 />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-        </Paper>
+        </div>
       )}
 
-      <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)}>
-        <DialogTitle>Delete Contact List?</DialogTitle>
+      <Sheet
+        open={Boolean(editingList) || editLoading}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingList(null);
+            setEditError(null);
+          }
+        }}
+      >
+        <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl">
+          <SheetHeader className="border-b border-border px-6 py-4">
+            <SheetTitle>Edit contact list</SheetTitle>
+            <SheetDescription>
+              Rename the list, fix typos, or remove contacts before sending.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            {editLoading ? (
+              <div className="space-y-3">
+                <Skeleton className="h-9 w-1/2" />
+                <Skeleton className="h-48 w-full" />
+              </div>
+            ) : editingList ? (
+              <div className="space-y-4">
+                {editError ? (
+                  <Alert variant="destructive">
+                    <AlertDescription>{editError}</AlertDescription>
+                  </Alert>
+                ) : null}
+                <div className="space-y-2">
+                  <Label htmlFor="list-name">List name</Label>
+                  <Input
+                    id="list-name"
+                    value={editingList.name}
+                    onChange={(e) =>
+                      setEditingList((prev) => ({
+                        ...prev,
+                        name: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="overflow-hidden rounded-md border border-border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Company</TableHead>
+                        <TableHead className="w-10"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {editingList.contacts.length === 0 ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={4}
+                            className="py-6 text-center text-sm text-muted-foreground"
+                          >
+                            No contacts. Add one below.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        editingList.contacts.map((c, idx) => (
+                          <TableRow key={c.id ?? `new-${idx}`}>
+                            <TableCell>
+                              <Input
+                                value={c.name}
+                                onChange={(e) =>
+                                  updateContact(idx, "name", e.target.value)
+                                }
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="email"
+                                value={c.email}
+                                onChange={(e) =>
+                                  updateContact(idx, "email", e.target.value)
+                                }
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                value={c.company}
+                                onChange={(e) =>
+                                  updateContact(idx, "company", e.target.value)
+                                }
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label={`remove-row-${idx}`}
+                                onClick={() => removeContact(idx)}
+                                className="text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={addContact}
+                  data-testid="add-contact-btn"
+                >
+                  <Plus />
+                  Add contact
+                </Button>
+              </div>
+            ) : null}
+          </div>
+          <SheetFooter className="border-t border-border px-6 py-4">
+            <Button
+              variant="outline"
+              onClick={() => setEditingList(null)}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => doSaveEdit()}
+              loading={saving}
+              disabled={!canSave || saving}
+              data-testid="save-list-btn"
+            >
+              Save changes
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      <Dialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(o) => !o && !deleting && setDeleteTarget(null)}
+      >
         <DialogContent>
-          <DialogContentText>
-            Are you sure you want to delete "<strong>{deleteTarget?.name}</strong>"?
-            All contacts in this list will be removed. This cannot be undone.
-          </DialogContentText>
+          <DialogHeader>
+            <DialogTitle>Delete contact list?</DialogTitle>
+            <DialogDescription>
+              "<strong>{deleteTarget?.name}</strong>" and all of its contacts will
+              be permanently removed. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteTarget(null)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => doDelete()}
+              loading={deleting}
+              data-testid="confirm-delete-list-btn"
+            >
+              Delete list
+            </Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteTarget(null)}>Cancel</Button>
-          <Button
-            color="error"
-            variant="contained"
-            onClick={handleDeleteConfirm}
-            data-testid="confirm-delete-list-btn"
-          >
-            Delete
-          </Button>
-        </DialogActions>
       </Dialog>
-    </Box>
+    </div>
+  );
+}
+
+function EmptyState({ onImport }) {
+  return (
+    <div className="rounded-lg border border-dashed border-border bg-card/40 p-10 text-center">
+      <h2 className="text-base font-semibold">No contact lists yet</h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Import a CSV or text file to start sending campaigns.
+      </p>
+      <Button className="mt-4" onClick={onImport}>
+        <Upload />
+        Import your first list
+      </Button>
+    </div>
   );
 }

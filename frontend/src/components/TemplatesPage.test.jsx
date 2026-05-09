@@ -1,43 +1,73 @@
-// Tests for TemplatesPage — KAN-22
 import React from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, test, expect, beforeEach, vi } from "vitest";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+
 import TemplatesPage from "./TemplatesPage";
-import * as api from "../services/api";
+import * as api from "@/lib/api";
 
-// Mock API
-jest.mock("../services/api");
+vi.mock("@/lib/api", () => ({
+  listTemplates: vi.fn(),
+  createTemplate: vi.fn(),
+  updateTemplate: vi.fn(),
+  deleteTemplate: vi.fn(),
+}));
 
-// Mock child editor components to keep tests focused on page orchestration
-jest.mock("./GuidedTemplateBuilder", () =>
-  function GuidedTemplateBuilder({ onHandoffToEditor, onSave, onCancel }) {
+vi.mock("sonner", () => ({
+  toast: {
+    loading: vi.fn(() => "tid"),
+    success: vi.fn(),
+    error: vi.fn(),
+    promise: vi.fn(),
+  },
+}));
+
+vi.mock("./GuidedTemplateBuilder", () => ({
+  default: function MockGuidedBuilder({ onHandoffToEditor, onSave, onCancel }) {
     return (
       <div data-testid="guided-builder">
-        <button onClick={() => onHandoffToEditor("<p>html</p>", "Subj", "Name", "MAIN")}>
+        <button
+          onClick={() =>
+            onHandoffToEditor("<p>html</p>", "Subj", "Name", "MAIN")
+          }
+        >
           Handoff
         </button>
-        <button onClick={() => onSave({ name: "T", type: "MAIN", subject: "S", body_html: "<p/>" })}>
+        <button
+          onClick={() =>
+            onSave({ name: "T", type: "MAIN", subject: "S", body_html: "<p/>" })
+          }
+        >
           Save from Guided
         </button>
         <button onClick={onCancel}>Cancel Guided</button>
       </div>
     );
-  }
-);
+  },
+}));
 
-jest.mock("./RichTextEditor", () =>
-  function RichTextEditor({ onSave, onCancel, initialHtml, templateName }) {
+vi.mock("./RichTextEditor", () => ({
+  default: function MockRichTextEditor({
+    onSave,
+    onCancel,
+    initialHtml,
+    templateName,
+  }) {
     return (
       <div data-testid="rich-text-editor">
         <span data-testid="rte-initial-html">{initialHtml}</span>
         <span data-testid="rte-name">{templateName}</span>
-        <button onClick={() => onSave({ name: "T", type: "MAIN", subject: "S", body_html: "<p/>" })}>
+        <button
+          onClick={() =>
+            onSave({ name: "T", type: "MAIN", subject: "S", body_html: "<p/>" })
+          }
+        >
           Save from Editor
         </button>
         <button onClick={onCancel}>Cancel Editor</button>
       </div>
     );
-  }
-);
+  },
+}));
 
 const MOCK_TEMPLATES = [
   {
@@ -58,11 +88,11 @@ const MOCK_TEMPLATES = [
 
 describe("TemplatesPage", () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     api.listTemplates.mockResolvedValue(MOCK_TEMPLATES);
   });
 
-  test("shows template list after loading", async () => {
+  test("shows templates after loading", async () => {
     render(<TemplatesPage />);
     await waitFor(() => {
       expect(screen.getByText("SWE Template")).toBeInTheDocument();
@@ -70,7 +100,7 @@ describe("TemplatesPage", () => {
     });
   });
 
-  test("Create New Template button opens mode chooser", async () => {
+  test("Create New Template opens the chooser", async () => {
     render(<TemplatesPage />);
     await waitFor(() => screen.getByTestId("create-new-btn"));
     fireEvent.click(screen.getByTestId("create-new-btn"));
@@ -78,7 +108,7 @@ describe("TemplatesPage", () => {
     expect(screen.getByTestId("choose-freeform")).toBeInTheDocument();
   });
 
-  test("choosing Guided Builder renders GuidedTemplateBuilder", async () => {
+  test("choosing Guided Builder renders the guided component", async () => {
     render(<TemplatesPage />);
     await waitFor(() => screen.getByTestId("create-new-btn"));
     fireEvent.click(screen.getByTestId("create-new-btn"));
@@ -86,7 +116,7 @@ describe("TemplatesPage", () => {
     expect(screen.getByTestId("guided-builder")).toBeInTheDocument();
   });
 
-  test("choosing Free-form Editor renders RichTextEditor", async () => {
+  test("choosing Free-form Editor renders the rich editor", async () => {
     render(<TemplatesPage />);
     await waitFor(() => screen.getByTestId("create-new-btn"));
     fireEvent.click(screen.getByTestId("create-new-btn"));
@@ -94,7 +124,7 @@ describe("TemplatesPage", () => {
     expect(screen.getByTestId("rich-text-editor")).toBeInTheDocument();
   });
 
-  test("guided builder handoff switches to RichTextEditor with the html", async () => {
+  test("guided builder handoff swaps to the rich editor with the html", async () => {
     render(<TemplatesPage />);
     await waitFor(() => screen.getByTestId("create-new-btn"));
     fireEvent.click(screen.getByTestId("create-new-btn"));
@@ -104,7 +134,7 @@ describe("TemplatesPage", () => {
     expect(screen.getByTestId("rte-initial-html")).toHaveTextContent("<p>html</p>");
   });
 
-  test("saving from guided builder calls createTemplate and returns to list", async () => {
+  test("saving from the guided builder calls createTemplate and returns to list", async () => {
     api.createTemplate.mockResolvedValueOnce({ id: 3 });
     render(<TemplatesPage />);
     await waitFor(() => screen.getByTestId("create-new-btn"));
@@ -112,26 +142,30 @@ describe("TemplatesPage", () => {
     fireEvent.click(screen.getByTestId("choose-guided"));
     fireEvent.click(screen.getByText("Save from Guided"));
     await waitFor(() => expect(api.createTemplate).toHaveBeenCalled());
-    await waitFor(() => expect(screen.queryByTestId("guided-builder")).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByTestId("guided-builder")).not.toBeInTheDocument()
+    );
   });
 
-  test("delete icon shows confirmation dialog", async () => {
+  test("delete action opens the confirmation dialog", async () => {
     render(<TemplatesPage />);
     await waitFor(() => screen.getByText("SWE Template"));
     fireEvent.click(screen.getByLabelText("delete-1"));
-    expect(screen.getByText(/Are you sure/i)).toBeInTheDocument();
+    expect(screen.getByText(/delete template\?/i)).toBeInTheDocument();
   });
 
   test("confirming delete calls deleteTemplate with the correct id", async () => {
-    api.deleteTemplate.mockResolvedValueOnce();
+    api.deleteTemplate.mockResolvedValueOnce(null);
     render(<TemplatesPage />);
     await waitFor(() => screen.getByText("SWE Template"));
     fireEvent.click(screen.getByLabelText("delete-1"));
     fireEvent.click(screen.getByTestId("confirm-delete-btn"));
-    await waitFor(() => expect(api.deleteTemplate).toHaveBeenCalledWith(1));
+    await waitFor(() =>
+      expect(api.deleteTemplate).toHaveBeenCalledWith(1)
+    );
   });
 
-  test("edit button switches to edit-editor with correct template data", async () => {
+  test("edit action switches to the editor with the template's data", async () => {
     render(<TemplatesPage />);
     await waitFor(() => screen.getByText("SWE Template"));
     fireEvent.click(screen.getByLabelText("edit-1"));

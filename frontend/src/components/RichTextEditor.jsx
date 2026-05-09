@@ -1,36 +1,37 @@
-// RichTextEditor — KAN-21
-// TipTap-based rich text editor with a variables sidebar.
-// Receives optional initialHtml (e.g. from GuidedTemplateBuilder handoff).
-// Outputs HTML via onSave with extracted variables dict.
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Link from "@tiptap/extension-link";
 import TextAlign from "@tiptap/extension-text-align";
 import {
-  Box,
-  Grid,
-  TextField,
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
+  Bold,
+  Italic,
+  Underline as UnderlineIcon,
+} from "lucide-react";
+
+import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import {
   Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Button,
-  Typography,
-  Paper,
-  Stack,
-  Chip,
-  Divider,
-  IconButton,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Tooltip,
-} from "@mui/material";
-import FormatBoldIcon from "@mui/icons-material/FormatBold";
-import FormatItalicIcon from "@mui/icons-material/FormatItalic";
-import FormatUnderlinedIcon from "@mui/icons-material/FormatUnderlined";
-import FormatAlignLeftIcon from "@mui/icons-material/FormatAlignLeft";
-import FormatAlignCenterIcon from "@mui/icons-material/FormatAlignCenter";
-import FormatAlignRightIcon from "@mui/icons-material/FormatAlignRight";
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const VARIABLES = [
   { label: "{{first_name}}", description: "Recipient's first name" },
@@ -42,21 +43,11 @@ const VARIABLES = [
   { label: "{{custom_2}}", description: "Custom variable 2" },
 ];
 
-/** Regex-scan HTML for {{...}} patterns and return them as a dict. */
 function extractVariables(html) {
   const found = [...html.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]);
   return Object.fromEntries([...new Set(found)].map((v) => [v, `{{${v}}}`]));
 }
 
-/**
- * @param {object} props
- * @param {string} [props.initialHtml]
- * @param {string} [props.subject]
- * @param {string} [props.templateName]
- * @param {string} [props.templateType]  'MAIN' | 'FOLLOW_UP'
- * @param {(data: object) => void} props.onSave
- * @param {() => void} props.onCancel
- */
 export default function RichTextEditor({
   initialHtml = "",
   subject: initialSubject = "",
@@ -64,6 +55,7 @@ export default function RichTextEditor({
   templateType: initialType = "MAIN",
   onSave,
   onCancel,
+  saving = false,
 }) {
   const [localName, setLocalName] = useState(initialName);
   const [localSubject, setLocalSubject] = useState(initialSubject);
@@ -79,17 +71,12 @@ export default function RichTextEditor({
     content: initialHtml,
   });
 
-  // Update editor content when initialHtml changes (guided builder handoff)
   useEffect(() => {
-    if (editor && initialHtml) {
-      editor.commands.setContent(initialHtml);
-    }
+    if (editor && initialHtml) editor.commands.setContent(initialHtml);
   }, [initialHtml, editor]);
-
-  // Sync name/subject/type props if they change (edit flow)
-  useEffect(() => { setLocalName(initialName); }, [initialName]);
-  useEffect(() => { setLocalSubject(initialSubject); }, [initialSubject]);
-  useEffect(() => { setLocalType(initialType); }, [initialType]);
+  useEffect(() => setLocalName(initialName), [initialName]);
+  useEffect(() => setLocalSubject(initialSubject), [initialSubject]);
+  useEffect(() => setLocalType(initialType), [initialType]);
 
   const handleSave = () => {
     if (!editor) return;
@@ -103,174 +90,163 @@ export default function RichTextEditor({
     });
   };
 
-  const insertVariable = (label) => {
+  const insertVariable = (label) =>
     editor?.chain().focus().insertContent(label).run();
-  };
 
   const isActive = (cmd, opts) => editor?.isActive(cmd, opts) ?? false;
 
   return (
-    <Box>
-      <Typography variant="h6" gutterBottom>
-        Rich Text Editor
-      </Typography>
-
-      {/* ── Meta fields ─────────────────────────────────────────────────── */}
-      <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 2 }}>
-        <TextField
-          label="Template Name"
-          value={localName}
-          onChange={(e) => setLocalName(e.target.value)}
-          size="small"
-          sx={{ flexGrow: 1 }}
-          inputProps={{ "data-testid": "rte-name" }}
-        />
-        <FormControl size="small" sx={{ minWidth: 160 }}>
-          <InputLabel>Type</InputLabel>
-          <Select
-            label="Type"
-            value={localType}
-            onChange={(e) => setLocalType(e.target.value)}
-            inputProps={{ "data-testid": "rte-type" }}
-          >
-            <MenuItem value="MAIN">Main Email</MenuItem>
-            <MenuItem value="FOLLOW_UP">Follow-up</MenuItem>
+    <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-[1fr_180px_1.5fr]">
+        <div className="space-y-2">
+          <Label htmlFor="rte-name-label">Template name</Label>
+          <Input
+            id="rte-name-label"
+            value={localName}
+            onChange={(e) => setLocalName(e.target.value)}
+            data-testid="rte-name"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Type</Label>
+          <Select value={localType} onValueChange={setLocalType}>
+            <SelectTrigger data-testid="rte-type">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="MAIN">Main email</SelectItem>
+              <SelectItem value="FOLLOW_UP">Follow-up</SelectItem>
+            </SelectContent>
           </Select>
-        </FormControl>
-        <TextField
-          label="Subject"
-          value={localSubject}
-          onChange={(e) => setLocalSubject(e.target.value)}
-          size="small"
-          sx={{ flexGrow: 2 }}
-          inputProps={{ "data-testid": "rte-subject" }}
-        />
-      </Stack>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="rte-subject-label">Subject</Label>
+          <Input
+            id="rte-subject-label"
+            value={localSubject}
+            onChange={(e) => setLocalSubject(e.target.value)}
+            data-testid="rte-subject"
+          />
+        </div>
+      </div>
 
-      <Grid container spacing={2}>
-        {/* ── Left: editor ────────────────────────────────────────────── */}
-        <Grid item xs={12} md={8}>
-          {/* Toolbar */}
-          <Paper variant="outlined" sx={{ p: 0.5, mb: 0.5, display: "flex", gap: 0.5 }}>
-            <Tooltip title="Bold">
-              <IconButton
-                size="small"
+      <div className="grid gap-4 lg:grid-cols-[1fr_240px]">
+        <TooltipProvider delayDuration={150}>
+          <div className="space-y-2">
+            <div className="flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1">
+              <ToolbarButton
+                label="Bold"
+                active={isActive("bold")}
                 onClick={() => editor?.chain().focus().toggleBold().run()}
-                color={isActive("bold") ? "primary" : "default"}
-                aria-label="bold"
               >
-                <FormatBoldIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Italic">
-              <IconButton
-                size="small"
+                <Bold className="h-4 w-4" />
+              </ToolbarButton>
+              <ToolbarButton
+                label="Italic"
+                active={isActive("italic")}
                 onClick={() => editor?.chain().focus().toggleItalic().run()}
-                color={isActive("italic") ? "primary" : "default"}
-                aria-label="italic"
               >
-                <FormatItalicIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Underline">
-              <IconButton
-                size="small"
+                <Italic className="h-4 w-4" />
+              </ToolbarButton>
+              <ToolbarButton
+                label="Underline"
+                active={isActive("underline")}
                 onClick={() => editor?.chain().focus().toggleUnderline().run()}
-                color={isActive("underline") ? "primary" : "default"}
-                aria-label="underline"
               >
-                <FormatUnderlinedIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-            <Divider orientation="vertical" flexItem />
-            <Tooltip title="Align Left">
-              <IconButton
-                size="small"
+                <UnderlineIcon className="h-4 w-4" />
+              </ToolbarButton>
+              <Separator orientation="vertical" className="mx-1 h-5" />
+              <ToolbarButton
+                label="Align left"
+                active={isActive("textAlign", { textAlign: "left" })}
                 onClick={() => editor?.chain().focus().setTextAlign("left").run()}
-                color={isActive("textAlign", { textAlign: "left" }) ? "primary" : "default"}
-                aria-label="align left"
               >
-                <FormatAlignLeftIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Align Center">
-              <IconButton
-                size="small"
-                onClick={() => editor?.chain().focus().setTextAlign("center").run()}
-                color={isActive("textAlign", { textAlign: "center" }) ? "primary" : "default"}
-                aria-label="align center"
+                <AlignLeft className="h-4 w-4" />
+              </ToolbarButton>
+              <ToolbarButton
+                label="Align center"
+                active={isActive("textAlign", { textAlign: "center" })}
+                onClick={() =>
+                  editor?.chain().focus().setTextAlign("center").run()
+                }
               >
-                <FormatAlignCenterIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Align Right">
-              <IconButton
-                size="small"
-                onClick={() => editor?.chain().focus().setTextAlign("right").run()}
-                color={isActive("textAlign", { textAlign: "right" }) ? "primary" : "default"}
-                aria-label="align right"
+                <AlignCenter className="h-4 w-4" />
+              </ToolbarButton>
+              <ToolbarButton
+                label="Align right"
+                active={isActive("textAlign", { textAlign: "right" })}
+                onClick={() =>
+                  editor?.chain().focus().setTextAlign("right").run()
+                }
               >
-                <FormatAlignRightIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          </Paper>
+                <AlignRight className="h-4 w-4" />
+              </ToolbarButton>
+            </div>
+            <div className="rounded-md border border-border bg-card p-3">
+              <EditorContent editor={editor} data-testid="editor-content" />
+            </div>
+          </div>
+        </TooltipProvider>
 
-          <Paper
-            variant="outlined"
-            sx={{
-              minHeight: 300,
-              p: 1.5,
-              "& .ProseMirror": { outline: "none", minHeight: 280 },
-              "& .ProseMirror p": { margin: 0 },
-            }}
-          >
-            <EditorContent editor={editor} data-testid="editor-content" />
-          </Paper>
-        </Grid>
-
-        {/* ── Right: variables sidebar ─────────────────────────────────── */}
-        <Grid item xs={12} md={4}>
-          <Typography variant="subtitle2" gutterBottom>
-            Insert Variable
-          </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
-            Click a variable to insert it at the cursor.
-          </Typography>
-          <Stack spacing={1}>
+        <aside className="space-y-3 rounded-md border border-border bg-card/60 p-4">
+          <div>
+            <h3 className="text-sm font-semibold">Insert variable</h3>
+            <p className="text-xs text-muted-foreground">
+              Click a chip to insert it at the cursor.
+            </p>
+          </div>
+          <div className="space-y-2">
             {VARIABLES.map((v) => (
-              <Box key={v.label}>
-                <Chip
-                  label={v.label}
-                  onClick={() => insertVariable(v.label)}
-                  size="small"
-                  clickable
-                  color="primary"
-                  variant="outlined"
-                  data-testid={`var-chip-${v.label}`}
-                />
-                <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-                  {v.description}
-                </Typography>
-              </Box>
+              <button
+                key={v.label}
+                type="button"
+                onClick={() => insertVariable(v.label)}
+                className="block w-full rounded-md border border-border bg-card px-3 py-2 text-left transition-colors hover:bg-accent"
+                data-testid={`var-chip-${v.label}`}
+              >
+                <Badge variant="outline" className="font-mono text-xs">
+                  {v.label}
+                </Badge>
+                <p className="mt-1 text-xs text-muted-foreground">{v.description}</p>
+              </button>
             ))}
-          </Stack>
-        </Grid>
-      </Grid>
+          </div>
+        </aside>
+      </div>
 
-      {/* ── Actions ──────────────────────────────────────────────────────── */}
-      <Stack direction="row" spacing={2} sx={{ mt: 3 }}>
-        <Button variant="outlined" onClick={onCancel}>
+      <div className="flex items-center justify-between border-t border-border pt-4">
+        <Button variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Box sx={{ flexGrow: 1 }} />
         <Button
-          variant="contained"
           onClick={handleSave}
-          disabled={!localName.trim() || !localSubject.trim()}
+          loading={saving}
+          disabled={!localName.trim() || !localSubject.trim() || saving}
         >
           Save Template
         </Button>
-      </Stack>
-    </Box>
+      </div>
+    </div>
+  );
+}
+
+function ToolbarButton({ label, active, onClick, children }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={label}
+          onClick={onClick}
+          className={cn(
+            "inline-flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+            active && "bg-accent text-foreground"
+          )}
+        >
+          {children}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }

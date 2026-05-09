@@ -1,4 +1,4 @@
-// Tests for generateTemplateHtml — KAN-20
+import { describe, test, expect } from "vitest";
 import { generateTemplateHtml } from "./templateGenerator";
 
 const BASE_PARAMS = {
@@ -15,23 +15,19 @@ const BASE_PARAMS = {
 
 describe("generateTemplateHtml", () => {
   test("returns a string", () => {
-    const result = generateTemplateHtml(BASE_PARAMS);
-    expect(typeof result).toBe("string");
+    expect(typeof generateTemplateHtml(BASE_PARAMS)).toBe("string");
   });
 
   test("includes yourName in the output", () => {
-    const result = generateTemplateHtml(BASE_PARAMS);
-    expect(result).toContain("Alex Kim");
+    expect(generateTemplateHtml(BASE_PARAMS)).toContain("Alex Kim");
   });
 
   test("retains {{first_name}} as a literal placeholder", () => {
-    const result = generateTemplateHtml(BASE_PARAMS);
-    expect(result).toContain("{{first_name}}");
+    expect(generateTemplateHtml(BASE_PARAMS)).toContain("{{first_name}}");
   });
 
   test("retains {{company}} as a literal placeholder", () => {
-    const result = generateTemplateHtml(BASE_PARAMS);
-    expect(result).toContain("{{company}}");
+    expect(generateTemplateHtml(BASE_PARAMS)).toContain("{{company}}");
   });
 
   test("includes all non-empty achievements", () => {
@@ -47,8 +43,10 @@ describe("generateTemplateHtml", () => {
   });
 
   test("omits empty achievement3 from the list", () => {
-    const result = generateTemplateHtml({ ...BASE_PARAMS, achievement3: "" });
-    // Should have exactly two <li> items
+    const result = generateTemplateHtml({
+      ...BASE_PARAMS,
+      achievement3: "",
+    });
     const liMatches = result.match(/<li>/g);
     expect(liMatches).toHaveLength(2);
   });
@@ -61,22 +59,26 @@ describe("generateTemplateHtml", () => {
   });
 
   test("uses coffee_chat CTA text", () => {
-    const result = generateTemplateHtml({ ...BASE_PARAMS, ctaPreference: "coffee_chat" });
-    expect(result).toContain("virtual coffee chat");
+    expect(
+      generateTemplateHtml({ ...BASE_PARAMS, ctaPreference: "coffee_chat" })
+    ).toContain("virtual coffee chat");
   });
 
   test("uses virtual_call CTA text", () => {
-    const result = generateTemplateHtml({ ...BASE_PARAMS, ctaPreference: "virtual_call" });
-    expect(result).toContain("brief virtual call");
+    expect(
+      generateTemplateHtml({ ...BASE_PARAMS, ctaPreference: "virtual_call" })
+    ).toContain("brief virtual call");
   });
 
   test("uses quick_call CTA text", () => {
-    const result = generateTemplateHtml({ ...BASE_PARAMS, ctaPreference: "quick_call" });
-    expect(result).toContain("15 minutes");
+    expect(
+      generateTemplateHtml({ ...BASE_PARAMS, ctaPreference: "quick_call" })
+    ).toContain("15 minutes");
   });
 
-  test("defaults to coffee_chat CTA for unknown preference", () => {
-    const result = generateTemplateHtml({ ...BASE_PARAMS, ctaPreference: "unknown" });
-    expect(result).toContain("virtual coffee chat");
+  test("defaults to coffee_chat CTA for an unknown preference", () => {
+    expect(
+      generateTemplateHtml({ ...BASE_PARAMS, ctaPreference: "unknown" })
+    ).toContain("virtual coffee chat");
   });
 });
