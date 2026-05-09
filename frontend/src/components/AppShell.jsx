@@ -271,33 +271,34 @@ function Sidebar({ collapsed, onToggle }) {
         collapsed ? "w-[68px]" : "w-60"
       )}
     >
-      <div
-        className={cn(
-          "flex h-14 items-center border-b border-border px-3",
-          collapsed ? "justify-center" : "justify-between"
-        )}
-      >
-        <div className="flex items-center gap-2">
-          <span className="grid h-8 w-8 place-items-center rounded-md bg-primary text-primary-foreground">
-            <Sparkles className="h-4 w-4" />
-          </span>
-          {!collapsed ? (
+      <div className="flex h-14 items-center justify-between border-b border-border px-3">
+        {!collapsed ? (
+          <div className="flex items-center gap-2">
+            <span className="grid h-8 w-8 place-items-center rounded-md bg-primary text-primary-foreground">
+              <Sparkles className="h-4 w-4" />
+            </span>
             <span className="text-sm font-semibold tracking-tight">
               Email Automation
             </span>
-          ) : null}
-        </div>
-        {!collapsed ? (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-muted-foreground"
-            onClick={onToggle}
-            aria-label="Collapse sidebar"
-          >
+          </div>
+        ) : (
+          <span className="grid h-8 w-8 place-items-center rounded-md bg-primary text-primary-foreground">
+            <Sparkles className="h-4 w-4" />
+          </span>
+        )}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 shrink-0 text-muted-foreground"
+          onClick={onToggle}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? (
+            <ChevronsRight className="h-4 w-4" />
+          ) : (
             <ChevronsLeft className="h-4 w-4" />
-          </Button>
-        ) : null}
+          )}
+        </Button>
       </div>
 
       <nav className="flex flex-1 flex-col gap-1 p-2">
@@ -332,20 +333,6 @@ function Sidebar({ collapsed, onToggle }) {
           return link;
         })}
       </nav>
-
-      {collapsed ? (
-        <div className="border-t border-border p-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-full text-muted-foreground"
-            onClick={onToggle}
-            aria-label="Expand sidebar"
-          >
-            <ChevronsRight className="h-4 w-4" />
-          </Button>
-        </div>
-      ) : null}
     </aside>
   );
 }
