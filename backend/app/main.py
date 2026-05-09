@@ -13,9 +13,16 @@ app = FastAPI(title="Email Automation API")
 # the /auth/login redirect and the /auth/callback response.
 app.add_middleware(SessionMiddleware, secret_key=settings.jwt_secret)
 
+_extra_origins = [
+    origin.strip()
+    for origin in os.getenv("CORS_EXTRA_ORIGINS", "").split(",")
+    if origin.strip()
+]
+_allowed_origins = [settings.frontend_url, *_extra_origins]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url],
+    allow_origins=_allowed_origins,
     allow_methods=["*"],
     allow_headers=["*"],
     allow_credentials=True,
