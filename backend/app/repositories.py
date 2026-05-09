@@ -564,6 +564,28 @@ class CampaignRepository:
         )
         return result.scalars().first()
 
+    async def get_by_id_system(self, campaign_id: int) -> Optional[Campaign]:
+        """Fetch a campaign by ID with no user_id filter.
+
+        Intended for system/scheduler use only where there is no authenticated
+        user context.  All user-facing code should use ``get_by_id`` instead.
+        """
+        result = await self.session.execute(
+            select(Campaign).where(Campaign.id == campaign_id)
+        )
+        return result.scalars().first()
+
+    async def get_ids_with_follow_up_template(self) -> List[int]:
+        """Return the IDs of all campaigns that have a follow-up template set.
+
+        Used by the scheduler to enumerate campaigns to process without
+        requiring a user_id filter.
+        """
+        result = await self.session.execute(
+            select(Campaign.id).where(Campaign.follow_up_template_id.isnot(None))
+        )
+        return [row[0] for row in result.all()]
+
     async def update(self, campaign_id: int, user_id: int, **fields) -> Optional[Campaign]:
         campaign = await self.get_by_id(campaign_id, user_id)
         if campaign is None:
