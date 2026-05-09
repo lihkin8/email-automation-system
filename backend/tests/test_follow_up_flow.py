@@ -63,22 +63,23 @@ def _make_follow_email(id=200, tracking_id="ft"):
 
 
 def test_manual_follow_up_run_happy_path_returns_counts():
-    with patch("app.routers.campaigns.CampaignRepository") as MockCampaignRepo, patch(
-        "app.routers.campaigns.TemplateRepository"
+    # After the refactor the logic lives in scheduler_service; patch there.
+    with patch("app.services.scheduler_service.CampaignRepository") as MockCampaignRepo, patch(
+        "app.services.scheduler_service.TemplateRepository"
     ) as MockTemplateRepo, patch(
-        "app.routers.campaigns.RecruiterRepository"
+        "app.services.scheduler_service.RecruiterRepository"
     ) as MockRecruiterRepo, patch(
-        "app.routers.campaigns.EmailRepository"
+        "app.services.scheduler_service.EmailRepository"
     ) as MockEmailRepo, patch(
-        "app.routers.campaigns.UserRepository"
+        "app.services.scheduler_service.UserRepository"
     ) as MockUserRepo, patch(
-        "app.routers.campaigns.storage.download_resume"
+        "app.services.scheduler_service.storage.download_resume"
     ) as MockDownload, patch(
-        "app.routers.campaigns.GmailService"
+        "app.services.scheduler_service.GmailService"
     ), patch(
-        "app.routers.campaigns.decrypt_token", return_value="plaintext-refresh-token"
+        "app.services.scheduler_service.decrypt_token", return_value="plaintext-refresh-token"
     ), patch(
-        "app.services.follow_up_service.FollowUpService"
+        "app.services.scheduler_service.FollowUpService"
     ) as MockFollowSvc:
         campaign_repo = AsyncMock()
         template_repo = AsyncMock()
@@ -92,7 +93,7 @@ def test_manual_follow_up_run_happy_path_returns_counts():
         MockEmailRepo.return_value = email_repo
         MockUserRepo.return_value = user_repo
 
-        campaign_repo.get_by_id.return_value = _make_campaign()
+        campaign_repo.get_by_id_system.return_value = _make_campaign()
         template_repo.get_by_id.return_value = _make_template()
         email_repo.get_unopened_main_emails_for_campaign.return_value = [_make_email()]
         email_repo.has_follow_up_for_recruiter_campaign.return_value = False
@@ -126,10 +127,11 @@ def test_manual_follow_up_run_happy_path_returns_counts():
 
 
 def test_manual_follow_up_run_returns_400_when_missing_template():
-    with patch("app.routers.campaigns.CampaignRepository") as MockCampaignRepo:
+    # After the refactor the logic lives in scheduler_service; patch there.
+    with patch("app.services.scheduler_service.CampaignRepository") as MockCampaignRepo:
         campaign_repo = AsyncMock()
         MockCampaignRepo.return_value = campaign_repo
-        campaign_repo.get_by_id.return_value = _make_campaign(follow_up_template_id=None)
+        campaign_repo.get_by_id_system.return_value = _make_campaign(follow_up_template_id=None)
 
         app.dependency_overrides[get_current_user_id] = _override_auth()
         app.dependency_overrides[get_session] = _override_session()

@@ -3,9 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
+import logging
 import os
 import asyncio
 from app.routers import auth, contacts, templates, campaigns, tracking, analytics, users, onboarding
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Email Automation API")
 
@@ -50,8 +53,44 @@ async def _startup_follow_up_scheduler():
 
     async def _loop():
         while True:
-            # Daily cadence; real implementation will scan campaigns and run follow-ups.
+            # Sleep first so the scheduler never fires immediately on startup.
             await asyncio.sleep(24 * 60 * 60)
+            try:
+                from app.database import async_session
+                from app.repositories import CampaignRepository
+                from app.services.scheduler_service import run_follow_ups_for_campaign
+
+                async with async_session() as session:
+                    campaign_repo = CampaignRepository(session)
+                    campaign_ids = await campaign_repo.get_ids_with_follow_up_template()
+
+                logger.info("Scheduler: found %d campaign(s) with follow-up templates", len(campaign_ids))
+
+                for campaign_id in campaign_ids:
+                    async with async_session() as session:
+                        summary = await run_follow_ups_for_campaign(campaign_id, session)
+                    if summary.get("skipped"):
+                        logger.info(
+                            "Scheduler: campaign %d skipped — %s",
+                            campaign_id,
+                            summary["skipped"],
+                        )
+                    elif summary.get("error"):
+                        logger.error(
+                            "Scheduler: campaign %d error — %s",
+                            campaign_id,
+                            summary["error"],
+                        )
+                    else:
+                        logger.info(
+                            "Scheduler: campaign %d — queued=%d sent=%d failed=%d",
+                            campaign_id,
+                            summary["queued"],
+                            summary["sent"],
+                            summary["failed"],
+                        )
+            except Exception as e:
+                logger.error("Scheduler error: %s", e)
 
     asyncio.create_task(_loop())
 
