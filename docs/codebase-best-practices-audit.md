@@ -30,7 +30,8 @@
   - `backend/app/routers/tracking.py` (`GET /track/pixel?email_id=...`)
   - `backend/app/services/email_service.py` (still embeds compat URL in legacy template path)
 - **Why it matters**: Sequential IDs can be guessed; an attacker can mark emails as opened.
-- **Fix later (quick)**: Deprecate/disable compat endpoint or require a signed token. Standardize all pixels on `tracking_id` (unguessable UUID).
+- **Status**: Addressed in `backend/app/routers/tracking.py`: compat `GET /track/pixel` now returns `410 Gone` with a deprecation header, and active campaign pixels use `tracking_id` URLs from `backend/app/routers/campaigns.py`.
+- **Fix later (quick)**: Remove any remaining legacy compat callers in `backend/app/services/email_service.py`.
 
 ### 4) Cookie/JWT hardening gaps (logout deletion, local-dev posture, CSRF)
 - **Where**:
@@ -48,21 +49,24 @@
   - `backend/app/routers/campaigns.py`
   - `backend/app/services/campaign_send_service.py`
 - **Why it matters**: Current approach can mislabel which email failed if failures are intermittent.
-- **Fix later (medium)**: Return per-item results from sender and update each `emails` row individually. Add retries/backoff and idempotency to prevent double-sends.
+- **Status**: Partially addressed in `backend/app/services/campaign_send_service.py`, `backend/app/services/follow_up_service.py`, `backend/app/routers/campaigns.py`, and `backend/app/repositories.py`: sender methods now return per-item results, routers update the exact `Email` row, and `/campaigns/{id}/send-progress` reports status counts.
+- **Fix later (medium)**: Add retries/backoff and idempotency to prevent duplicate sends on retry.
 
 ### 6) Tracking pixel injection is fragile across email clients
 - **Where**:
   - `backend/app/services/campaign_send_service.py` (`inject_tracking_pixel`)
   - `backend/app/services/email_service.py` (legacy HTML embeds a background-image pixel)
 - **Why it matters**: CSS background images are more likely to be stripped than `<img>` pixels.
-- **Fix later (quick)**: Inject a hidden 1×1 `<img>` pixel instead of a background-image div.
+- **Status**: Addressed for campaign sends in `backend/app/services/campaign_send_service.py` with a hidden 1×1 `<img>` pixel.
+- **Fix later (quick)**: Audit/remove any remaining legacy background-image pixel generation in `backend/app/services/email_service.py`.
 
 ### 7) Frontend XSS surface area via `dangerouslySetInnerHTML`
 - **Where**:
   - `frontend/src/pages/CampaignsPage.jsx` (renders rendered template HTML)
   - `frontend/src/components/GuidedTemplateBuilder.jsx` (template previews)
 - **Why it matters**: User-authored HTML templates are rendered directly; if any untrusted content can enter templates/variables, this becomes an XSS vector.
-- **Fix later (medium)**: Sanitize HTML at render time (DOMPurify) or strictly constrain template HTML to a safe subset; avoid rendering arbitrary HTML where possible.
+- **Status**: Addressed in `frontend/src/lib/sanitizeHtml.js`, `frontend/src/pages/CampaignsPage.jsx`, and `frontend/src/components/GuidedTemplateBuilder.jsx` using DOMPurify before HTML preview rendering.
+- **Fix later (medium)**: Consider constraining template HTML to a safe subset at creation time as a second layer.
 
 ### 8) DB indexing + timezone correctness gaps
 - **Where**:

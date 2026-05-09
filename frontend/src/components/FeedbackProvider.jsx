@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 
 import { onColdStart } from "@/lib/apiClient";
 import { fetchHealth } from "@/lib/api";
+import { useTheme } from "@/lib/theme";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 /**
@@ -16,18 +17,21 @@ import { TooltipProvider } from "@/components/ui/tooltip";
  *  - Radix TooltipProvider so app-wide tooltips share a single delay context.
  */
 export function FeedbackProvider({ children }) {
+  const { resolvedTheme } = useTheme();
+
   return (
     <TooltipProvider delayDuration={150}>
       {children}
       <Toaster
-        theme="dark"
+        theme={resolvedTheme}
         position="top-right"
+        offset={64}
         richColors
         closeButton
         toastOptions={{
           classNames: {
             toast:
-              "border border-border bg-card text-card-foreground shadow-lg",
+              "border border-border bg-card/95 text-card-foreground shadow-xl backdrop-blur",
             description: "text-muted-foreground",
           },
         }}

@@ -15,12 +15,14 @@ import {
   getCampaignMetrics,
   getCampaignPreview,
   getCampaignUnopened,
+  getSendProgress,
   listCampaigns,
   listContactLists,
   listTemplates,
   runCampaignFollowUps,
   sendCampaign,
 } from "@/lib/api";
+import { sanitizeHtml } from "@/lib/sanitizeHtml";
 import { useAction } from "@/lib/useAction";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -49,14 +51,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -504,190 +499,155 @@ export default function CampaignsPage() {
         )}
       </section>
 
-      <Sheet
+      <Dialog
         open={Boolean(previewCampaign)}
         onOpenChange={(o) => !o && setPreviewCampaign(null)}
       >
-        <SheetContent
-          side="right"
-          className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl"
-        >
-          <SheetHeader className="border-b border-border px-6 py-4">
-            <SheetTitle>{previewCampaign?.name ?? "Campaign"}</SheetTitle>
-            <SheetDescription>
+        <DialogContent className="flex max-h-[90vh] max-w-5xl grid-rows-none flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="border-b border-border px-6 py-4 pr-12">
+            <div className="flex items-center gap-2">
+              <DialogTitle>{previewCampaign?.name ?? "Campaign"}</DialogTitle>
+              {previewCampaign?.status ? (
+                <Badge variant="outline">{previewCampaign.status}</Badge>
+              ) : null}
+            </div>
+            <DialogDescription>
               Live preview rendered against a sample contact.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto">
             {previewError ? (
-              <Alert variant="destructive">
+              <Alert variant="destructive" className="m-6">
                 <AlertDescription>{previewError}</AlertDescription>
               </Alert>
             ) : null}
 
             {previewLoading ? (
-              <div className="space-y-3">
+              <div className="space-y-3 p-6">
                 <Skeleton className="h-20 w-full" />
                 <Skeleton className="h-48 w-full" />
               </div>
             ) : preview ? (
-              <>
-                {metrics ? (
+              <div className="grid min-h-[520px] lg:grid-cols-[18rem_minmax(0,1fr)]">
+                <aside className="space-y-4 border-b border-border bg-muted/20 p-6 lg:border-b-0 lg:border-r">
                   <Card>
-                    <CardContent className="grid grid-cols-3 gap-3 p-4 text-sm">
-                      <div>
-                        <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                          Sent (main)
-                        </p>
-                        <p className="text-lg font-semibold">{metrics.sent_main_count}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                          Opened
-                        </p>
-                        <p className="text-lg font-semibold">{metrics.opened_main_count}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                          Open rate
-                        </p>
-                        <p className="text-lg font-semibold">
-                          {(metrics.open_rate_pct ?? 0).toFixed(1)}%
-                        </p>
-                      </div>
+                    <CardHeader>
+                      <CardTitle className="text-sm">Subject</CardTitle>
+                    </CardHeader>
+                    <CardContent className="break-words text-sm">
+                      {preview.subject_rendered}
                     </CardContent>
                   </Card>
-                ) : null}
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm">Sample recipient</CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-sm text-muted-foreground">
-                    {preview.sample_contact?.name} ·{" "}
-                    {preview.sample_contact?.email} ·{" "}
-                    {preview.sample_contact?.company}
-                  </CardContent>
-                </Card>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-sm">Sample recipient</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-1 text-sm text-muted-foreground">
+                      <p className="break-words font-medium text-foreground">
+                        {preview.sample_contact?.name}
+                      </p>
+                      <p
+                        className="truncate"
+                        title={preview.sample_contact?.email}
+                      >
+                        {preview.sample_contact?.email}
+                      </p>
+                      <p className="break-words">
+                        {preview.sample_contact?.company}
+                      </p>
+                    </CardContent>
+                  </Card>
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm">Subject</CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-sm">
-                    {preview.subject_rendered}
-                  </CardContent>
-                </Card>
+                  {metrics ? (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-sm">Metrics</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3 text-sm">
+                        <Metric label="Sent" value={metrics.sent_main_count} />
+                        <Metric label="Opened" value={metrics.opened_main_count} />
+                        <Metric
+                          label="Open rate"
+                          value={`${(metrics.open_rate_pct ?? 0).toFixed(1)}%`}
+                        />
+                      </CardContent>
+                    </Card>
+                  ) : null}
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm">Email body</CardTitle>
-                  </CardHeader>
-                  <CardContent>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-sm">Unopened contacts</CardTitle>
+                      <CardDescription>
+                        {unopened.length} waiting for an open.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {unopened.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">None</p>
+                      ) : (
+                        <div className="max-h-40 space-y-2 overflow-y-auto text-sm">
+                          {unopened.map((u) => (
+                            <div key={u.email_id}>
+                              <p className="font-medium text-foreground">
+                                {u.recruiter_name}
+                              </p>
+                              <p className="truncate text-xs text-muted-foreground">
+                                {u.recruiter_email}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </aside>
+
+                <section className="bg-muted/10 p-6">
+                  <div className="mx-auto min-h-[520px] max-w-2xl rounded-lg border border-border bg-white p-6 text-zinc-900 shadow-sm">
                     <div
-                      className="rounded-md border border-border bg-white p-4 text-zinc-900"
                       dangerouslySetInnerHTML={{
-                        __html: preview.body_html_rendered,
+                        __html: sanitizeHtml(preview.body_html_rendered),
                       }}
                     />
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm">Resolved variables</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {resolvedVars.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">None</p>
-                    ) : (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Variable</TableHead>
-                            <TableHead>Value</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {resolvedVars.map(([k, v]) => (
-                            <TableRow key={k}>
-                              <TableCell className="font-mono text-xs">
-                                {k}
-                              </TableCell>
-                              <TableCell>{String(v)}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm">Unopened contacts</CardTitle>
-                    <CardDescription>
-                      Recipients we still haven't seen open the main email.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {unopened.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">None</p>
-                    ) : (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Name</TableHead>
-                            <TableHead>Email</TableHead>
-                            <TableHead>Company</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {unopened.map((u) => (
-                            <TableRow key={u.email_id}>
-                              <TableCell>{u.recruiter_name}</TableCell>
-                              <TableCell>{u.recruiter_email}</TableCell>
-                              <TableCell>{u.company}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    )}
-                  </CardContent>
-                </Card>
-              </>
+                  </div>
+                </section>
+              </div>
             ) : (
-              <p className="text-sm text-muted-foreground">No preview yet.</p>
+              <p className="p-6 text-sm text-muted-foreground">No preview yet.</p>
             )}
           </div>
-          <SheetFooter className="border-t border-border px-6 py-4">
-            <Button
-              variant="outline"
-              onClick={() => setPreviewCampaign(null)}
-            >
-              Close
-            </Button>
-            {previewCampaign?.follow_up_template_id ? (
+          <DialogFooter className="sticky bottom-0 border-t border-border bg-card/95 px-6 py-4 backdrop-blur sm:items-center sm:justify-between">
+            <CampaignSendProgress campaignId={previewCampaign?.id} active={sending} />
+            <div className="flex flex-col-reverse gap-2 sm:flex-row">
               <Button
                 variant="outline"
-                onClick={() => doFollowUps(previewCampaign.id)}
-                loading={followingUp}
+                onClick={() => setPreviewCampaign(null)}
               >
-                <Repeat2 />
-                Run follow-ups
+                Close
               </Button>
-            ) : null}
-            <Button
-              onClick={() => doSend(previewCampaign.id)}
-              loading={sending}
-              disabled={!previewCampaign || sending}
-            >
-              <Send />
-              Send campaign
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+              {previewCampaign?.follow_up_template_id ? (
+                <Button
+                  variant="outline"
+                  onClick={() => doFollowUps(previewCampaign.id)}
+                  loading={followingUp}
+                >
+                  <Repeat2 />
+                  Run follow-ups
+                </Button>
+              ) : null}
+              <Button
+                onClick={() => doSend(previewCampaign.id)}
+                loading={sending}
+                disabled={!previewCampaign || sending}
+              >
+                <Send />
+                Send campaign
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={Boolean(deleteTarget)}
@@ -720,6 +680,74 @@ export default function CampaignsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function Metric({ label, value }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-xs uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
+      <span className="font-semibold text-foreground">{value}</span>
+    </div>
+  );
+}
+
+function CampaignSendProgress({ campaignId, active }) {
+  const [progress, setProgress] = useState(null);
+
+  useEffect(() => {
+    if (!campaignId || !active) {
+      if (!active) setProgress(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+    let intervalId;
+
+    async function poll() {
+      try {
+        const next = await getSendProgress(campaignId);
+        if (cancelled) return;
+        setProgress(next);
+        if (next?.status === "COMPLETED" && intervalId) {
+          clearInterval(intervalId);
+        }
+      } catch {
+        if (!cancelled) setProgress(null);
+      }
+    }
+
+    poll();
+    intervalId = window.setInterval(poll, 750);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [active, campaignId]);
+
+  if (!active) {
+    return <div className="min-h-[2.25rem] flex-1" />;
+  }
+
+  const total = progress?.total ?? 0;
+  const completed = (progress?.sent ?? 0) + (progress?.failed ?? 0);
+  const value = total > 0 ? Math.round((completed / total) * 100) : 35;
+  const label = progress
+    ? `Sent ${progress.sent} of ${total}${
+        progress.failed ? ` · ${progress.failed} failed` : ""
+      }`
+    : "Sending campaign...";
+
+  return (
+    <div className="min-w-0 flex-1 space-y-1.5 text-left">
+      <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+        <span>{label}</span>
+        {progress ? <span>{value}%</span> : null}
+      </div>
+      <Progress value={value} className={!progress ? "animate-pulse" : ""} />
     </div>
   );
 }

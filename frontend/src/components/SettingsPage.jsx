@@ -16,6 +16,7 @@ import {
   updateSettings,
   uploadResume,
 } from "@/lib/api";
+import { useTheme } from "@/lib/theme";
 import { useAction } from "@/lib/useAction";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -31,6 +32,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tabs,
@@ -49,6 +57,7 @@ export default function SettingsPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [pendingResumeName, setPendingResumeName] = useState(null);
   const fileInputRef = useRef(null);
+  const { theme, setTheme } = useTheme();
 
   useEffect(() => {
     let cancelled = false;
@@ -275,6 +284,24 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="flex flex-col gap-3 rounded-md border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-medium">Appearance</p>
+                  <p className="text-xs text-muted-foreground">
+                    Choose the color theme for this browser.
+                  </p>
+                </div>
+                <Select value={theme} onValueChange={setTheme}>
+                  <SelectTrigger className="w-full sm:w-40" aria-label="Appearance">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="system">System</SelectItem>
+                    <SelectItem value="light">Light</SelectItem>
+                    <SelectItem value="dark">Dark</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="flex flex-col gap-2 rounded-md border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3">
                   <span className="grid h-9 w-9 place-items-center rounded-md bg-secondary text-muted-foreground">
