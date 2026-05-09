@@ -1,6 +1,6 @@
 // API helpers — thin wrappers over apiClient. Names match the legacy
 // services/api.js exports so call sites stay stable.
-import { apiClient } from "@/lib/apiClient";
+import { ApiError, apiClient } from "@/lib/apiClient";
 
 // ── Analytics ────────────────────────────────────────────────────────────────
 export const fetchAnalytics = (page = 1, pageSize = 20) =>
@@ -50,6 +50,14 @@ export const getCampaignUnopened = (id, params = {}) =>
   apiClient.get(`/campaigns/${id}/unopened`, { params });
 export const getCampaignContactOpens = (id, recruiterId) =>
   apiClient.get(`/campaigns/${id}/contacts/${recruiterId}/opens`);
+export const getSendProgress = async (id) => {
+  try {
+    return await apiClient.get(`/campaigns/${id}/send-progress`);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+};
 export const sendCampaign = (id, delaySeconds = 2.0) =>
   apiClient.post(`/campaigns/${id}/send`, null, {
     params: { delay_seconds: delaySeconds },

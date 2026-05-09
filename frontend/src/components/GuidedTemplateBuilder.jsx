@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 
+import { sanitizeHtml } from "@/lib/sanitizeHtml";
 import { generateTemplateHtml } from "@/utils/templateGenerator";
 
 import { Button } from "@/components/ui/button";
@@ -226,9 +227,11 @@ export default function GuidedTemplateBuilder({
           <CardContent>
             <div className="min-h-[460px] rounded-md border border-border bg-white p-4 text-sm text-zinc-900">
               {isComplete ? (
-                /* Preview renders user-supplied content as HTML; safe because the
-                   value comes from this user's own form state. */
-                <div dangerouslySetInnerHTML={{ __html: generatedHtml }} />
+                <div
+                  dangerouslySetInnerHTML={{
+                    __html: sanitizeHtml(generatedHtml),
+                  }}
+                />
               ) : (
                 <p className="text-zinc-500">
                   Fill in all required fields to see a preview.

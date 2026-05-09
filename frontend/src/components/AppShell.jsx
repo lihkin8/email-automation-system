@@ -8,14 +8,17 @@ import {
   ListChecks,
   LogOut,
   Mail,
+  Moon,
   Send,
   Settings,
   Sparkles,
+  Sun,
   Users,
 } from "lucide-react";
 
 import { AuthContext } from "@/components/RequireAuth";
 import { logout } from "@/lib/api";
+import { useTheme } from "@/lib/theme";
 import { useAction } from "@/lib/useAction";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -77,6 +80,7 @@ export default function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useContext(AuthContext) ?? {};
+  const { resolvedTheme, setTheme } = useTheme();
 
   const crumbs = useMemo(() => buildCrumbs(location.pathname), [location.pathname]);
 
@@ -121,6 +125,18 @@ export default function AppShell() {
             </BreadcrumbList>
           </Breadcrumb>
           <div className="ml-auto flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+              aria-label={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} theme`}
+            >
+              {resolvedTheme === "dark" ? (
+                <Sun className="h-4 w-4" />
+              ) : (
+                <Moon className="h-4 w-4" />
+              )}
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
