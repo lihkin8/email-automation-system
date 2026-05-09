@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     jwt_secret: str
     fernet_key: str
     frontend_url: str = "http://localhost:3000"
+    tracking_ignore_window_seconds: int = 10
 
     class Config:
         env_file = ".env"

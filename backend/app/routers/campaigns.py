@@ -20,7 +20,7 @@ from app.dependencies import get_current_user_id
 from app.repositories import CampaignRepository, RecruiterRepository, TemplateRepository, EmailRepository, UserRepository
 from app.models import EmailType, EmailStatus
 from app.services.email_service import GmailService
-from app.services.campaign_send_service import CampaignSendService, inject_tracking_pixel
+from app.services.campaign_send_service import CampaignSendService, SendItemResult, inject_tracking_pixel
 from app.services.template_render import build_recruiter_context, render_template_string
 from app.services import storage
 from app.services.auth_service import decrypt_token
@@ -64,6 +64,16 @@ class SendResponse(BaseModel):
     campaign_id: int
     sent: int
     failed: int
+
+
+class SendProgressOut(BaseModel):
+    campaign_id: int
+    status: str
+    total: int
+    pending: int
+    sent: int
+    failed: int
+
 
 class FollowUpRunResponse(BaseModel):
     campaign_id: int
@@ -244,18 +254,70 @@ async def send_campaign(
         items.append((r.email, subject_rendered, body_html))
         email_ids.append(email_obj.id)
 
-    result = await sender.send_html_batch(items, delay_seconds=delay_seconds, attachments=attachments)
+    updated_email_ids: set[int] = set()
 
-    # Update statuses best-effort (MVP); assume order matches
-    # If any failed, we still complete the run.
-    # For more granular failures, we'd update per email based on actual send results.
-    for email_id in email_ids[: result.sent]:
-        await email_repo.update_status(email_id, EmailStatus.SENT)
-    for email_id in email_ids[result.sent :]:
-        await email_repo.update_status(email_id, EmailStatus.FAILED)
+    async def on_progress(index: int, item_result: SendItemResult) -> None:
+        if index >= len(email_ids):
+            return
+        email_id = email_ids[index]
+        status_to_set = EmailStatus.SENT if item_result.ok else EmailStatus.FAILED
+        await email_repo.update_status(email_id, status_to_set)
+        updated_email_ids.add(email_id)
+
+    results = await sender.send_html_batch(
+        items,
+        delay_seconds=delay_seconds,
+        attachments=attachments,
+        on_progress=on_progress,
+    )
+
+    # Some tests and alternate sender implementations may not invoke the optional
+    # callback. Fill any gaps from the returned per-item results.
+    for index, item_result in enumerate(results):
+        if index >= len(email_ids):
+            continue
+        email_id = email_ids[index]
+        if email_id in updated_email_ids:
+            continue
+        status_to_set = EmailStatus.SENT if item_result.ok else EmailStatus.FAILED
+        await email_repo.update_status(email_id, status_to_set)
+
+    sent = sum(1 for item_result in results if item_result.ok)
+    failed = len(results) - sent
 
     await campaign_repo.update(campaign_id, user_id, status="COMPLETED")
-    return SendResponse(campaign_id=campaign_id, sent=result.sent, failed=result.failed)
+    return SendResponse(campaign_id=campaign_id, sent=sent, failed=failed)
+
+
+@router.get("/{campaign_id}/send-progress", response_model=SendProgressOut)
+async def send_progress(
+    campaign_id: int,
+    user_id: int = Depends(get_current_user_id),
+    session: AsyncSession = Depends(get_session),
+):
+    campaign_repo = CampaignRepository(session)
+    email_repo = EmailRepository(session)
+
+    campaign = await campaign_repo.get_by_id(campaign_id, user_id)
+    if campaign is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
+
+    counts = await email_repo.get_campaign_status_counts(
+        user_id=user_id,
+        campaign_id=campaign_id,
+        email_type=EmailType.MAIN,
+    )
+    pending = int(counts.get(EmailStatus.PENDING, counts.get("PENDING", 0)) or 0)
+    sent = int(counts.get(EmailStatus.SENT, counts.get("SENT", 0)) or 0)
+    failed = int(counts.get(EmailStatus.FAILED, counts.get("FAILED", 0)) or 0)
+    return SendProgressOut(
+        campaign_id=campaign_id,
+        status=str(campaign.status),
+        total=pending + sent + failed,
+        pending=pending,
+        sent=sent,
+        failed=failed,
+    )
 
 
 @router.post("/{campaign_id}/follow-ups/run", response_model=FollowUpRunResponse)
@@ -342,18 +404,40 @@ async def run_follow_ups(
         items.append((recruiter.email, subject_rendered, body_html))
         follow_up_email_ids.append(follow_email.id)
 
-    result = await svc.send_follow_ups(items=items, delay_seconds=delay_seconds, attachments=attachments)
+    updated_email_ids: set[int] = set()
 
-    for email_id in follow_up_email_ids[: result.sent]:
-        await email_repo.update_status(email_id, EmailStatus.SENT)
-    for email_id in follow_up_email_ids[result.sent :]:
-        await email_repo.update_status(email_id, EmailStatus.FAILED)
+    async def on_progress(index: int, item_result: SendItemResult) -> None:
+        if index >= len(follow_up_email_ids):
+            return
+        email_id = follow_up_email_ids[index]
+        status_to_set = EmailStatus.SENT if item_result.ok else EmailStatus.FAILED
+        await email_repo.update_status(email_id, status_to_set)
+        updated_email_ids.add(email_id)
+
+    results = await svc.send_follow_ups(
+        items=items,
+        delay_seconds=delay_seconds,
+        attachments=attachments,
+        on_progress=on_progress,
+    )
+
+    for index, item_result in enumerate(results):
+        if index >= len(follow_up_email_ids):
+            continue
+        email_id = follow_up_email_ids[index]
+        if email_id in updated_email_ids:
+            continue
+        status_to_set = EmailStatus.SENT if item_result.ok else EmailStatus.FAILED
+        await email_repo.update_status(email_id, status_to_set)
+
+    sent = sum(1 for item_result in results if item_result.ok)
+    failed = len(results) - sent
 
     return FollowUpRunResponse(
         campaign_id=campaign_id,
         queued=len(follow_up_email_ids),
-        sent=result.sent,
-        failed=result.failed,
+        sent=sent,
+        failed=failed,
     )
 
 

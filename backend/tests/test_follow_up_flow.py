@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.dependencies import get_current_user_id
 from app.database import get_session
+from app.services.campaign_send_service import SendItemResult
 
 
 def _override_auth(user_id: int = 1):
@@ -105,7 +106,7 @@ def test_manual_follow_up_run_happy_path_returns_counts():
 
         follow_svc = AsyncMock()
         MockFollowSvc.return_value = follow_svc
-        follow_svc.send_follow_ups.return_value = MagicMock(sent=1, failed=0)
+        follow_svc.send_follow_ups.return_value = [SendItemResult(to_email="r@example.com", ok=True)]
 
         app.dependency_overrides[get_current_user_id] = _override_auth()
         app.dependency_overrides[get_session] = _override_session()

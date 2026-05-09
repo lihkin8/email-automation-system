@@ -152,6 +152,60 @@ def test_get_campaign_returns_404_when_not_found():
     assert response.status_code == 404
 
 
+def test_send_progress_endpoint_reports_status_counts():
+    mock_campaign = _make_campaign(id=5, status="RUNNING")
+
+    with patch("app.routers.campaigns.CampaignRepository") as MockCampaignRepo, patch(
+        "app.routers.campaigns.EmailRepository"
+    ) as MockEmailRepo:
+        campaign_repo = AsyncMock()
+        email_repo = AsyncMock()
+        MockCampaignRepo.return_value = campaign_repo
+        MockEmailRepo.return_value = email_repo
+        campaign_repo.get_by_id.return_value = mock_campaign
+        email_repo.get_campaign_status_counts.return_value = {
+            "PENDING": 2,
+            "SENT": 3,
+            "FAILED": 1,
+        }
+
+        app.dependency_overrides[get_current_user_id] = _override_auth()
+        app.dependency_overrides[get_session] = _override_session()
+
+        client = TestClient(app)
+        response = client.get("/campaigns/5/send-progress")
+
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "campaign_id": 5,
+        "status": "RUNNING",
+        "total": 6,
+        "pending": 2,
+        "sent": 3,
+        "failed": 1,
+    }
+    email_repo.get_campaign_status_counts.assert_awaited_once()
+
+
+def test_send_progress_endpoint_returns_404_when_campaign_missing():
+    with patch("app.routers.campaigns.CampaignRepository") as MockCampaignRepo:
+        campaign_repo = AsyncMock()
+        MockCampaignRepo.return_value = campaign_repo
+        campaign_repo.get_by_id.return_value = None
+
+        app.dependency_overrides[get_current_user_id] = _override_auth()
+        app.dependency_overrides[get_session] = _override_session()
+
+        client = TestClient(app, raise_server_exceptions=False)
+        response = client.get("/campaigns/999/send-progress")
+
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 404
+
+
 def test_update_campaign_returns_200():
     updated = _make_campaign(id=3, name="Updated")
 
