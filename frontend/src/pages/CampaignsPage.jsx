@@ -548,7 +548,7 @@ export default function CampaignsPage() {
                         {preview.sample_contact?.name}
                       </p>
                       <p
-                        className="break-all"
+                        className="truncate"
                         title={preview.sample_contact?.email}
                       >
                         {preview.sample_contact?.email}
