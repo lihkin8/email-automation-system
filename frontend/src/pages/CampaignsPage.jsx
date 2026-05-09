@@ -534,7 +534,7 @@ export default function CampaignsPage() {
                     <CardHeader>
                       <CardTitle className="text-sm">Subject</CardTitle>
                     </CardHeader>
-                    <CardContent className="text-sm">
+                    <CardContent className="break-words text-sm">
                       {preview.subject_rendered}
                     </CardContent>
                   </Card>
@@ -543,12 +543,19 @@ export default function CampaignsPage() {
                     <CardHeader>
                       <CardTitle className="text-sm">Sample recipient</CardTitle>
                     </CardHeader>
-                    <CardContent className="text-sm text-muted-foreground">
-                      <p className="font-medium text-foreground">
+                    <CardContent className="space-y-1 text-sm text-muted-foreground">
+                      <p className="break-words font-medium text-foreground">
                         {preview.sample_contact?.name}
                       </p>
-                      <p>{preview.sample_contact?.email}</p>
-                      <p>{preview.sample_contact?.company}</p>
+                      <p
+                        className="break-all"
+                        title={preview.sample_contact?.email}
+                      >
+                        {preview.sample_contact?.email}
+                      </p>
+                      <p className="break-words">
+                        {preview.sample_contact?.company}
+                      </p>
                     </CardContent>
                   </Card>
 
