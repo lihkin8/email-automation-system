@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   AtSign,
   BarChart3,
@@ -6,6 +7,9 @@ import {
   Eye,
   Mail,
   RefreshCcw,
+  Rocket,
+  Users,
+  Send,
 } from "lucide-react";
 
 import {
@@ -160,6 +164,10 @@ export default function Dashboard() {
 
   if (loadingInitial) {
     return <DashboardSkeleton />;
+  }
+
+  if (!loadingInitial && campaigns.length === 0 && companies.length === 0) {
+    return <DashboardEmpty />;
   }
 
   return (
@@ -407,6 +415,64 @@ function DashboardSkeleton() {
       </div>
       <Skeleton className="h-64 w-full rounded-lg" />
       <Skeleton className="h-72 w-full rounded-lg" />
+    </div>
+  );
+}
+
+const EMPTY_STEPS = [
+  {
+    icon: Users,
+    label: "Import contacts",
+    description: "Upload a text file with recruiter names and emails.",
+    to: "/contacts/import",
+  },
+  {
+    icon: Mail,
+    label: "Create a template",
+    description: "Write your outreach email with personalisation variables.",
+    to: "/templates",
+  },
+  {
+    icon: Send,
+    label: "Launch a campaign",
+    description: "Select a contact list and template, then send.",
+    to: "/campaigns",
+  },
+];
+
+function DashboardEmpty() {
+  return (
+    <div className="flex flex-col items-center justify-center py-24 text-center">
+      <span className="mb-4 grid h-14 w-14 place-items-center rounded-full bg-primary/10 text-primary">
+        <Rocket className="h-7 w-7" />
+      </span>
+      <h1 className="text-xl font-semibold tracking-tight">
+        Ready to launch your first campaign?
+      </h1>
+      <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+        You have no outreach data yet. Follow these three steps to get started.
+      </p>
+
+      <div className="mt-10 grid w-full max-w-2xl grid-cols-1 gap-4 sm:grid-cols-3">
+        {EMPTY_STEPS.map(({ icon: Icon, label, description, to }, i) => (
+          <Link
+            key={to}
+            to={to}
+            className="group flex flex-col items-center gap-3 rounded-xl border border-border bg-card p-6 text-center transition-colors hover:border-primary/50 hover:bg-accent/40"
+          >
+            <span className="grid h-10 w-10 place-items-center rounded-md bg-secondary text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
+              <Icon className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Step {i + 1}
+              </p>
+              <p className="mt-0.5 text-sm font-medium text-foreground">{label}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+            </div>
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }

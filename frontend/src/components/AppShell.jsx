@@ -8,6 +8,7 @@ import {
   ListChecks,
   LogOut,
   Mail,
+  Menu,
   Moon,
   Send,
   Settings,
@@ -31,6 +32,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import {
   Tooltip,
   TooltipContent,
@@ -103,6 +110,51 @@ export default function AppShell() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/85 px-4 backdrop-blur md:px-6">
+          {/* Mobile hamburger — hidden on md+ where sidebar is visible */}
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="shrink-0 md:hidden"
+                aria-label="Open navigation"
+              >
+                <Menu className="h-5 w-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-64 p-0">
+              <div className="flex h-14 items-center gap-2 border-b border-border px-4">
+                <span className="grid h-8 w-8 place-items-center rounded-md bg-primary text-primary-foreground">
+                  <Sparkles className="h-4 w-4" />
+                </span>
+                <span className="text-sm font-semibold tracking-tight">
+                  Email Automation
+                </span>
+              </div>
+              <nav className="flex flex-col gap-1 p-2">
+                {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
+                  <SheetClose asChild key={to}>
+                    <NavLink
+                      to={to}
+                      end={end}
+                      className={({ isActive }) =>
+                        cn(
+                          "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                          isActive
+                            ? "bg-accent text-accent-foreground"
+                            : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+                        )
+                      }
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                      <span>{label}</span>
+                    </NavLink>
+                  </SheetClose>
+                ))}
+              </nav>
+            </SheetContent>
+          </Sheet>
+
           <Breadcrumb>
             <BreadcrumbList>
               {crumbs.map((c, idx) => {
